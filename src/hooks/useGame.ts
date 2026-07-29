@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { GameEngine } from '../game/engine';
-import type { GameState } from '../game/types';
 
 /**
  * Owns a {@link GameEngine} for the lifetime of the component and re-renders
@@ -10,13 +9,11 @@ export function useGame() {
   // Lazy-init the engine once per mount.
   const engine = useMemo(() => new GameEngine(), []);
 
-  const [state, setState] = useState<GameState>(engine.state);
-
-  useEffect(() => {
-    return engine.subscribe(() => {
-      setState({ ...engine.state });
-    });
-  }, [engine]);
+  const state = useSyncExternalStore(
+    (callback) => engine.subscribe(callback),
+    () => engine.state,
+    () => engine.state,
+  );
 
   useEffect(() => {
     return () => {

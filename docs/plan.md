@@ -35,9 +35,10 @@ The project was originally scaffolded with ESLint + Prettier and TS 5.9. We late
 - `src/game/config.ts` — constants and level math. Single source of truth for `GRID`, color palette per level, animation timings, scoring numbers. This is the easiest file to tweak if you want to balance the game.
 - `src/game/board.ts` — pure functions: `findMatches`, `applyGravity`, `refillEmpty`, `wouldMatch`, `findAnyValidMove`, `detectBombTrigger`, `resolveClears`, plus tiny geometry helpers (`inBounds`, `samePos`, `isAdjacent`, `dirBetween`).
 - `src/game/storage.ts` — localStorage read/write. Returns 0 / no-ops on the server.
-- `src/game/engine.ts` — the `GameEngine` class. The only file that has side effects (timers + state).
+- `src/game/engine.ts` — the `GameEngine` class. The orchestrator: it owns the state machine, timers, subscriptions, and turn lifecycle.
+- `src/game/state.ts`, `animation.ts`, `hints.ts`, `turns.ts`, `progression.ts`, and `bombs.ts` — focused helpers that keep the engine readable without changing gameplay rules.
 
-The deliberate split between `board.ts` (pure) and `engine.ts` (stateful) is the key refactor. It's what makes the engine trivially testable.
+The deliberate split between pure board helpers and the engine orchestrator is the key refactor. It makes the engine easier to reason about while preserving the same gameplay rules.
 
 ### 4. React layer
 
