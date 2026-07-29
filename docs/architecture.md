@@ -43,14 +43,20 @@ src/
 ├── App.css                 # Component CSS (board, HUD, overlays, animations)
 │
 ├── game/                   # ── Pure / engine code (no React, no DOM) ──
-│   ├── types.ts            # Gem, Position, GameState, MatchInfo, …
-│   ├── config.ts           # GRID, colors, animation timings, level math
-│   ├── board.ts            # findMatches, applyGravity, refillEmpty, …
-│   ├── engine.ts           # GameEngine class — state machine + animation
-│   ├── storage.ts          # localStorage wrapper for the best-score
-│   ├── board.test.ts       # Vitest tests for board logic
-│   ├── config.test.ts      # Vitest tests for level config / palette
-│   └── engine.test.ts      # Vitest tests for the engine (fake-timers)
+│   ├── animation.ts       # Shared async delay helper used by the engine
+│   ├── bombs.ts           # Bomb trigger resolution and clear behavior
+│   ├── board.ts           # findMatches, applyGravity, refillEmpty, …
+│   ├── config.ts          # GRID, colors, animation timings, level math
+│   ├── engine.ts          # GameEngine class — orchestrates state + timers + turns
+│   ├── hints.ts           # Hint scheduling / cancellation helpers
+│   ├── progression.ts     # Level-end and game-over progression checks
+│   ├── state.ts           # Initial state factory for a fresh game
+│   ├── storage.ts         # localStorage wrapper for the best-score
+│   ├── turns.ts           # Turn resolution sequence (clear → gravity → refill)
+│   ├── types.ts           # Gem, Position, GameState, MatchInfo, …
+│   ├── board.test.ts      # Vitest tests for board logic
+│   ├── config.test.ts     # Vitest tests for level config / palette
+│   └── engine.test.ts     # Vitest tests for the engine (fake-timers)
 │
 ├── components/             # ── React view layer ──
 │   ├── Board.tsx           # Cell background + gem rendering
@@ -107,14 +113,19 @@ The React side:
 ```ts
 function useGame() {
   const engine = useMemo(() => new GameEngine(), []);
-  const [state, setState] = useState(engine.state);
-  useEffect(() => engine.subscribe(() => setState({ ...engine.state })), [engine]);
+
+  const state = useSyncExternalStore(
+    (callback) => engine.subscribe(callback),
+    () => engine.state,
+    () => engine.state,
+  );
+
   useEffect(() => () => engine.dispose(), [engine]);
   return { engine, state };
 }
 ```
 
-Every time the engine calls `setState`, the `subscribe` callback runs, which copies `engine.state` into React state. React then re-renders the tree.
+The hook subscribes to the engine's state updates instead of mirroring the state manually in `useState`. React re-renders from the external store snapshot whenever the engine notifies subscribers.
 
 This means **the engine can run for arbitrarily long (e.g. a chain of 6 cascades) without any React state management**. The React layer just sees the final state.
 
@@ -149,6 +160,7 @@ This three-step pattern is what the original v1 game did with direct DOM manipul
 Everything in `src/game/` is **pure**: no React, no DOM, no globals. Functions take a grid in, return a grid (or set of cells) out. The engine is the only thing that has side effects (timers, state mutation, React subscriptions).
 
 Why bother?
+
 - 100% unit-testable. No jsdom needed for the 60+ tests covering match detection, gravity, refill, bomb triggers, level config, and engine state transitions.
 - The engine can be reused in a Node/CLI environment, a worker, or a future React Native port.
 - Refactors of the UI never touch the game rules.
@@ -167,7 +179,7 @@ The engine's `screen` field is the source of truth for "what is the user looking
 
 Transitions:
 
-```
+```text
    start ──[startLevel]──▶ playing
                               │
         ┌─────────────────────┼─────────────────────┐
