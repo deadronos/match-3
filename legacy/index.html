@@ -1,0 +1,1510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gems — A Match-3</title>
+  <style>
+    :root {
+      --bg-1: #f6f7fb;
+      --bg-2: #eef1f8;
+      --ink: #1f2330;
+      --ink-soft: #5a6075;
+      --ink-mute: #9098ad;
+      --card: #ffffff;
+      --card-border: #e6e9f2;
+      --accent: #4d96ff;
+      --accent-2: #6bcb77;
+      --danger: #ff6b9d;
+      --warn: #ffc75f;
+      --shadow-soft: 0 8px 24px rgba(31, 35, 48, 0.06);
+      --shadow-med:  0 18px 50px rgba(31, 35, 48, 0.10);
+      --shadow-gem:  0 4px 0 rgba(31, 35, 48, 0.08), 0 6px 14px rgba(31, 35, 48, 0.10);
+      --radius-lg: 22px;
+      --radius-md: 14px;
+      --radius-sm: 10px;
+      --ease: cubic-bezier(.22, .61, .36, 1);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter",
+                   "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      background: radial-gradient(1200px 800px at 20% 0%, #eaf0ff 0%, transparent 60%),
+                  radial-gradient(900px 600px at 100% 100%, #fde9f1 0%, transparent 55%),
+                  linear-gradient(180deg, var(--bg-1), var(--bg-2));
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      user-select: none;
+      -webkit-user-select: none;
+      overflow: hidden;
+    }
+
+    button {
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+      border: none;
+      background: none;
+    }
+
+    .app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .game {
+      width: min(440px, 100%);
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-med);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* ---------- HUD ---------- */
+    .hud {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .stat {
+      background: #f8f9fd;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .stat .label {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+      font-weight: 600;
+    }
+    .stat .value {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .stat .sub {
+      font-size: 11px;
+      color: var(--ink-soft);
+      font-weight: 500;
+    }
+    .stat.highlight .value { color: var(--accent); }
+    .stat.warn .value { color: #b88600; }
+
+    /* ---------- Toolbar ---------- */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .toolbar .left {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .pill {
+      background: #f1f3fa;
+      color: var(--ink-soft);
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      border: 1px solid var(--card-border);
+    }
+    .pill .dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-2);
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .icon-btn {
+      width: 36px; height: 36px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 10px;
+      background: #f1f3fa;
+      color: var(--ink-soft);
+      border: 1px solid var(--card-border);
+      transition: transform .12s var(--ease), background .12s var(--ease), color .12s var(--ease);
+    }
+    .icon-btn:hover { background: #e6eaf5; color: var(--ink); }
+    .icon-btn:active { transform: scale(.94); }
+    .icon-btn svg { width: 18px; height: 18px; }
+
+    /* ---------- Board ---------- */
+    .board-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: linear-gradient(180deg, #fafbff, #f3f5fc);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--card-border);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5), inset 0 2px 6px rgba(31,35,48,.04);
+      padding: 8px;
+      overflow: hidden;
+    }
+    .board {
+      position: relative;
+      width: 100%; height: 100%;
+    }
+    .cell-bg {
+      position: absolute;
+      left: 0; top: 0;
+      width: calc(100% / 8);
+      height: calc(100% / 8);
+      border-radius: 10px;
+      background: rgba(31,35,48,0.025);
+    }
+    .gem {
+      position: absolute;
+      left: 0; top: 0;
+      width: calc(100% / 8);
+      height: calc(100% / 8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: left .28s var(--ease), top .28s var(--ease);
+      will-change: left, top;
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    .gem .shape {
+      width: 80%;
+      height: 80%;
+      border-radius: 22%;
+      position: relative;
+      box-shadow: var(--shadow-gem);
+      transition: transform .14s var(--ease), box-shadow .14s var(--ease), filter .14s var(--ease);
+      background: linear-gradient(160deg, var(--c-light) 0%, var(--c-bg) 55%, var(--c-dark) 100%);
+    }
+    .gem .shape::before {
+      content: "";
+      position: absolute;
+      inset: 8% 14% 50% 14%;
+      border-radius: 50%;
+      background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0));
+      filter: blur(2px);
+      pointer-events: none;
+    }
+    /* Special piece badges */
+    .gem .badge {
+      position: absolute;
+      inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(255,255,255,.92);
+      font-weight: 800;
+      font-size: 22px;
+      text-shadow: 0 1px 2px rgba(0,0,0,.18);
+      pointer-events: none;
+    }
+    .gem .badge svg { width: 50%; height: 50%; }
+
+    .gem:hover .shape { transform: scale(1.05); }
+    .gem.selected .shape {
+      transform: scale(1.08);
+      box-shadow: 0 0 0 3px rgba(77,150,255,.55), 0 4px 0 rgba(31,35,48,.08), 0 10px 22px rgba(77,150,255,.25);
+    }
+    .gem.hint .shape {
+      animation: hintPulse 1.2s ease-in-out infinite;
+    }
+    @keyframes hintPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(77,150,255,0), var(--shadow-gem); }
+      50%      { box-shadow: 0 0 0 5px rgba(77,150,255,.35), 0 6px 16px rgba(77,150,255,.25); }
+    }
+    .gem.cursor .shape {
+      box-shadow: 0 0 0 2px rgba(31,35,48,.18), var(--shadow-gem);
+    }
+    .gem.popping .shape {
+      animation: pop .32s var(--ease) forwards;
+    }
+    @keyframes pop {
+      0%   { transform: scale(1); filter: brightness(1); }
+      40%  { transform: scale(1.25); filter: brightness(1.4); }
+      100% { transform: scale(0);    filter: brightness(1.6); opacity: 0; }
+    }
+    .gem.swap-fail .shape {
+      animation: shake .35s var(--ease);
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      75% { transform: translateX(4px); }
+    }
+
+    /* ---------- Score popups ---------- */
+    .pop {
+      position: absolute;
+      font-weight: 800;
+      font-size: 18px;
+      color: var(--ink);
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      animation: popFloat .9s ease-out forwards;
+      text-shadow: 0 1px 0 rgba(255,255,255,.9);
+    }
+    .pop.big { font-size: 26px; color: var(--accent); }
+    @keyframes popFloat {
+      0%   { opacity: 0; transform: translate(-50%, 0) scale(.7); }
+      20%  { opacity: 1; transform: translate(-50%, -10px) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -60px) scale(1); }
+    }
+
+    /* ---------- Footer ---------- */
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--ink-soft);
+    }
+    .footer .keys {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .footer kbd {
+      background: #f1f3fa;
+      border: 1px solid var(--card-border);
+      border-bottom-width: 2px;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      color: var(--ink);
+    }
+
+    /* ---------- Buttons ---------- */
+    .btn {
+      padding: 12px 18px;
+      border-radius: 14px;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: 0.01em;
+      background: var(--ink);
+      color: #fff;
+      box-shadow: 0 4px 0 rgba(0,0,0,.15), 0 10px 24px rgba(31,35,48,.18);
+      transition: transform .12s var(--ease), box-shadow .12s var(--ease), background .12s var(--ease);
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,.15), 0 4px 12px rgba(31,35,48,.18); }
+    .btn.primary {
+      background: linear-gradient(180deg, #5aa1ff, #4d96ff);
+    }
+    .btn.ghost {
+      background: #f1f3fa;
+      color: var(--ink);
+      box-shadow: 0 2px 0 rgba(31,35,48,.06);
+    }
+    .btn.ghost:hover { background: #e6eaf5; }
+    .btn.danger {
+      background: linear-gradient(180deg, #ff85b1, #ff6b9d);
+    }
+
+    /* ---------- Overlays ---------- */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(31, 35, 48, 0.35);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s var(--ease);
+      z-index: 50;
+    }
+    .overlay.show { opacity: 1; pointer-events: auto; }
+    .overlay .panel {
+      width: min(380px, 100%);
+      background: var(--card);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-med);
+      padding: 28px 24px 22px;
+      text-align: center;
+      transform: translateY(8px) scale(.98);
+      transition: transform .3s var(--ease);
+    }
+    .overlay.show .panel { transform: translateY(0) scale(1); }
+    .overlay h1 {
+      margin: 0 0 4px;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+    .overlay h2 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      font-weight: 800;
+    }
+    .overlay p {
+      margin: 8px 0 18px;
+      color: var(--ink-soft);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+    .overlay .row {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .overlay .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 14px 0 20px;
+    }
+    .overlay .stats .stat {
+      background: #f8f9fd;
+    }
+    .brand {
+      display: inline-flex;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .brand .dot {
+      width: 14px; height: 14px; border-radius: 4px;
+    }
+
+    .overlay .legend {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 12px 0 4px;
+      font-size: 12px;
+      color: var(--ink-soft);
+    }
+    .overlay .legend .item {
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .overlay .legend .swatch {
+      width: 14px; height: 14px; border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="game" id="game">
+      <div class="hud">
+        <div class="stat highlight">
+          <div class="label">Level</div>
+          <div class="value" id="hud-level">1</div>
+          <div class="sub" id="hud-target">Target · 1,000</div>
+        </div>
+        <div class="stat">
+          <div class="label">Score</div>
+          <div class="value" id="hud-score">0</div>
+          <div class="sub" id="hud-best">Best · 0</div>
+        </div>
+        <div class="stat warn">
+          <div class="label">Moves</div>
+          <div class="value" id="hud-moves">30</div>
+          <div class="sub" id="hud-progress">0 / 1,000</div>
+        </div>
+        <div class="stat">
+          <div class="label">Combo</div>
+          <div class="value" id="hud-combo">×1</div>
+          <div class="sub" id="hud-cascades">0 cascades</div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="left">
+          <span class="pill"><span class="dot"></span><span id="hud-status">Playing</span></span>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button class="icon-btn" id="btn-shuffle" title="Shuffle board">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 3h5v5"/><path d="M4 20 21 3"/>
+              <path d="M21 16v5h-5"/><path d="m15 15 6 6"/><path d="M4 4l5 5"/>
+            </svg>
+          </button>
+          <button class="icon-btn" id="btn-pause" title="Pause (P)">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="5" width="4" height="14" rx="1"/>
+              <rect x="14" y="5" width="4" height="14" rx="1"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="board-wrap">
+        <div class="board" id="board"></div>
+      </div>
+
+      <div class="footer">
+        <div class="keys">
+          <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> move
+          <span style="opacity:.5">·</span>
+          <kbd>Space</kbd> select
+          <span style="opacity:.5">·</span>
+          <kbd>P</kbd> pause
+        </div>
+        <div>v1.0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Start overlay -->
+  <div class="overlay show" id="overlay-start">
+    <div class="panel">
+      <div class="brand" id="start-brand"></div>
+      <h1>Gems</h1>
+      <p>Swap adjacent gems to match three or more. Chain cascades for bigger combos. Hit the target score before you run out of moves.</p>
+      <div class="legend" id="start-legend"></div>
+      <p style="margin-top:14px;">Reach the target to advance. Difficulty ramps with each level.</p>
+      <div class="row">
+        <button class="btn primary" id="btn-start">Play</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause overlay -->
+  <div class="overlay" id="overlay-pause">
+    <div class="panel">
+      <h2>Paused</h2>
+      <p>Take a breath. The board will be right where you left it.</p>
+      <div class="row">
+        <button class="btn primary" id="btn-resume">Resume</button>
+        <button class="btn ghost" id="btn-restart-pause">Restart Level</button>
+        <button class="btn ghost" id="btn-menu-pause">Main Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Level complete overlay -->
+  <div class="overlay" id="overlay-level">
+    <div class="panel">
+      <h2 id="level-title">Level 1 Complete!</h2>
+      <p id="level-sub">Nice chain work.</p>
+      <div class="stats">
+        <div class="stat">
+          <div class="label">Score</div>
+          <div class="value" id="level-score">0</div>
+        </div>
+        <div class="stat">
+          <div class="label">Bonus</div>
+          <div class="value" id="level-bonus">+0</div>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="btn-next">Next Level</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game over overlay -->
+  <div class="overlay" id="overlay-over">
+    <div class="panel">
+      <h2>Out of Moves</h2>
+      <p id="over-sub">So close. Want another shot?</p>
+      <div class="stats">
+        <div class="stat">
+          <div class="label">Score</div>
+          <div class="value" id="over-score">0</div>
+        </div>
+        <div class="stat">
+          <div class="label">Best</div>
+          <div class="value" id="over-best">0</div>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="btn-retry">Try Again</button>
+        <button class="btn ghost" id="btn-menu-over">Main Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    'use strict';
+
+    // ---------- Config ----------
+    const GRID = 8;
+    const BASE_COLORS = [
+      { name: 'pink',   bg: '#FF6B9D', light: '#FF9BC0', dark: '#E04E7E' },
+      { name: 'amber',  bg: '#FFC75F', light: '#FFD98C', dark: '#E5A937' },
+      { name: 'coral',  bg: '#FF8E72', light: '#FFB09A', dark: '#E66B4E' },
+      { name: 'green',  bg: '#6BCB77', light: '#95E1A3', dark: '#48B055' },
+      { name: 'blue',   bg: '#4D96FF', light: '#7DB3FF', dark: '#2C75DB' },
+      { name: 'purple', bg: '#9B72CF', light: '#B89AE0', dark: '#7853B0' },
+    ];
+    const EXTRA_COLORS = [
+      { name: 'teal',   bg: '#5EC2B0', light: '#85D6C7', dark: '#3FA08F' },
+      { name: 'rose',   bg: '#F25C8A', light: '#F78AAA', dark: '#C7396A' },
+    ];
+    const STORAGE_KEY = 'gems.match3.v1';
+    const ANIM = {
+      swap: 280,
+      fall: 320,
+      pop: 320,
+      hintDelay: 5000,
+    };
+
+    // ---------- State ----------
+    const state = {
+      grid: [],          // 2D array of { type, special, el, id }
+      nextId: 1,
+      score: 0,
+      level: 1,
+      moves: 30,
+      target: 1000,
+      combo: 1,
+      cascadesThisTurn: 0,
+      selected: null,    // {r, c}
+      cursor: { r: 0, c: 0 },
+      busy: false,       // true during animations / chain processing
+      paused: false,
+      playing: false,
+      hintTimer: null,
+      hintCell: null,
+      gameOver: false,
+    };
+
+    // ---------- DOM ----------
+    const $ = (id) => document.getElementById(id);
+    const boardEl   = $('board');
+    const hudLevel  = $('hud-level');
+    const hudScore  = $('hud-score');
+    const hudMoves  = $('hud-moves');
+    const hudTarget = $('hud-target');
+    const hudBest   = $('hud-best');
+    const hudProgress = $('hud-progress');
+    const hudCombo  = $('hud-combo');
+    const hudCasc   = $('hud-cascades');
+    const hudStatus = $('hud-status');
+
+    const ovStart = $('overlay-start');
+    const ovPause = $('overlay-pause');
+    const ovLevel = $('overlay-level');
+    const ovOver  = $('overlay-over');
+
+    // ---------- Utilities ----------
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const inBounds = (r, c) => r >= 0 && r < GRID && c >= 0 && c < GRID;
+    const samePos = (a, b) => a && b && a.r === b.r && a.c === b.c;
+
+    function colorPalette() {
+      // Levels 1-3: 6 colors. 4-6: 7. 7+: 8.
+      if (state.level >= 7) return [...BASE_COLORS, ...EXTRA_COLORS];
+      if (state.level >= 4) return [...BASE_COLORS, EXTRA_COLORS[0]];
+      return BASE_COLORS;
+    }
+    function numTypes() { return colorPalette().length; }
+
+    function loadBest() {
+      try { return parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10) || 0; }
+      catch { return 0; }
+    }
+    function saveBest(score) {
+      try { localStorage.setItem(STORAGE_KEY, String(score)); } catch {}
+    }
+
+    // ---------- Board construction ----------
+    function makeGem(type, special = null) {
+      return { id: state.nextId++, type, special, el: null };
+    }
+
+    function emptyGrid() {
+      return Array.from({ length: GRID }, () => Array.from({ length: GRID }, () => null));
+    }
+
+    function generateBoard() {
+      const grid = emptyGrid();
+      const types = numTypes();
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          let type;
+          let guard = 0;
+          do {
+            type = Math.floor(Math.random() * types);
+            guard++;
+          } while (
+            guard < 30 && (
+              (c >= 2 && grid[r][c-1]?.type === type && grid[r][c-2]?.type === type) ||
+              (r >= 2 && grid[r-1][c]?.type === type && grid[r-2][c]?.type === type)
+            )
+          );
+          grid[r][c] = makeGem(type);
+        }
+      }
+      return grid;
+    }
+
+    function renderBoard() {
+      boardEl.innerHTML = '';
+      // Cell backgrounds
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell-bg';
+          positionAt(cell, r, c);
+          boardEl.appendChild(cell);
+        }
+      }
+      // Gems
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          const gem = state.grid[r][c];
+          if (gem) placeGemElement(gem, r, c, /*animate*/ false);
+        }
+      }
+    }
+
+    function positionAt(el, r, c) {
+      el.style.left = (c * (100 / GRID)) + '%';
+      el.style.top  = (r * (100 / GRID)) + '%';
+    }
+
+    function placeGemElement(gem, r, c, animate) {
+      if (!gem.el) {
+        const el = document.createElement('div');
+        el.className = 'gem';
+        el.dataset.id = gem.id;
+        const shape = document.createElement('div');
+        shape.className = 'shape';
+        el.appendChild(shape);
+        el.addEventListener('mousedown', onGemPointerDown);
+        el.addEventListener('touchstart', onGemPointerDown, { passive: false });
+        gem.el = el;
+        boardEl.appendChild(el);
+      }
+      applyGemStyle(gem);
+      if (!animate) {
+        // Skip transition on initial placement
+        gem.el.style.transition = 'none';
+      }
+      positionAt(gem.el, r, c);
+      if (!animate) {
+        // Force reflow then restore
+        // eslint-disable-next-line no-unused-expressions
+        gem.el.offsetHeight;
+        gem.el.style.transition = '';
+      }
+    }
+
+    function applyGemStyle(gem) {
+      const palette = colorPalette();
+      const c = palette[gem.type];
+      const el = gem.el;
+      el.style.setProperty('--c-bg', c.bg);
+      el.style.setProperty('--c-light', c.light);
+      el.style.setProperty('--c-dark', c.dark);
+      // Remove any existing badge
+      const oldBadge = el.querySelector('.badge');
+      if (oldBadge) oldBadge.remove();
+      if (gem.special) {
+        const badge = document.createElement('div');
+        badge.className = 'badge';
+        if (gem.special === 'striped-h') badge.innerHTML = iconH();
+        else if (gem.special === 'striped-v') badge.innerHTML = iconV();
+        else if (gem.special === 'bomb') badge.innerHTML = iconBomb();
+        el.appendChild(badge);
+      }
+    }
+
+    function iconH() {
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+        <line x1="3" y1="12" x2="21" y2="12"/>
+      </svg>`;
+    }
+    function iconV() {
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+        <line x1="12" y1="3" x2="12" y2="21"/>
+      </svg>`;
+    }
+    function iconBomb() {
+      return `<svg viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="12" cy="13" r="7"/>
+        <path d="M14 4l2 2 2-2" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+      </svg>`;
+    }
+
+    // ---------- Animation primitives ----------
+    async function animateSwap(g1, p1, g2, p2) {
+      // p1, p2 are {r, c}
+      const el1 = g1.el, el2 = g2.el;
+      const dur = ANIM.swap + 'ms';
+      el1.style.transitionDuration = dur;
+      el2.style.transitionDuration = dur;
+      positionAt(el1, p2.r, p2.c);
+      positionAt(el2, p1.r, p1.c);
+      await sleep(parseInt(dur) + 20);
+      el1.style.transitionDuration = '';
+      el2.style.transitionDuration = '';
+    }
+
+    async function animateFall(gem, toR) {
+      const dur = ANIM.fall + 'ms';
+      gem.el.style.transitionDuration = dur;
+      positionAt(gem.el, toR, gem._col);
+      await sleep(ANIM.fall);
+      gem.el.style.transitionDuration = '';
+    }
+
+    function showPop(text, r, c, big = false) {
+      const el = document.createElement('div');
+      el.className = 'pop' + (big ? ' big' : '');
+      el.textContent = text;
+      el.style.left = (c * (100 / GRID) + (100 / GRID) / 2) + '%';
+      el.style.top  = (r * (100 / GRID) + (100 / GRID) / 2) + '%';
+      boardEl.appendChild(el);
+      setTimeout(() => el.remove(), 900);
+    }
+
+    // ---------- Match detection ----------
+    // Returns { groups: [{cells, type, special?, upgradeAt?}], cells: Set('r,c') }
+    function findMatches() {
+      const groups = [];
+      const seen = new Set();
+      const key = (r, c) => r + ',' + c;
+
+      // Horizontal runs
+      for (let r = 0; r < GRID; r++) {
+        let runStart = 0;
+        for (let c = 1; c <= GRID; c++) {
+          const same = c < GRID && state.grid[r][c] && state.grid[r][runStart] &&
+                       state.grid[r][c].type === state.grid[r][runStart].type;
+          if (!same) {
+            const len = c - runStart;
+            if (len >= 3) {
+              const cells = [];
+              for (let k = runStart; k < c; k++) cells.push({ r, c: k });
+              const types = cells.map(p => state.grid[p.r][p.c].type);
+              const special = specialFor(len, 'h');
+              const upgradeAt = special ? cells[Math.floor(cells.length / 2)] : null;
+              groups.push({ cells, type: types[0], special, upgradeAt });
+              cells.forEach(p => seen.add(key(p.r, p.c)));
+            }
+            runStart = c;
+          }
+        }
+      }
+      // Vertical runs
+      for (let c = 0; c < GRID; c++) {
+        let runStart = 0;
+        for (let r = 1; r <= GRID; r++) {
+          const same = r < GRID && state.grid[r][c] && state.grid[runStart][c] &&
+                       state.grid[r][c].type === state.grid[runStart][c].type;
+          if (!same) {
+            const len = r - runStart;
+            if (len >= 3) {
+              const cells = [];
+              for (let k = runStart; k < r; k++) cells.push({ r: k, c });
+              const types = cells.map(p => state.grid[p.r][p.c].type);
+              const special = specialFor(len, 'v');
+              const upgradeAt = special ? cells[Math.floor(cells.length / 2)] : null;
+              groups.push({ cells, type: types[0], special, upgradeAt });
+              cells.forEach(p => seen.add(key(p.r, p.c)));
+            }
+            runStart = r;
+          }
+        }
+      }
+      return { groups, cells: seen };
+    }
+
+    function specialFor(len, dir) {
+      if (len >= 5) return 'bomb';
+      if (len === 4) return dir === 'h' ? 'striped-h' : 'striped-v';
+      return null;
+    }
+
+    // ---------- Selection / Input ----------
+    function clearSelection() {
+      if (state.selected) {
+        const g = state.grid[state.selected.r]?.[state.selected.c];
+        if (g?.el) g.el.classList.remove('selected');
+      }
+      state.selected = null;
+    }
+    function selectAt(r, c) {
+      clearSelection();
+      if (!inBounds(r, c)) return;
+      const g = state.grid[r][c];
+      if (!g) return;
+      state.selected = { r, c };
+      g.el.classList.add('selected');
+      cancelHint();
+    }
+    function updateCursor() {
+      document.querySelectorAll('.gem.cursor').forEach(el => el.classList.remove('cursor'));
+      const g = state.grid[state.cursor.r]?.[state.cursor.c];
+      if (g?.el) g.el.classList.add('cursor');
+    }
+
+    function onGemPointerDown(ev) {
+      if (state.busy || !state.playing || state.paused || state.gameOver) return;
+      ev.preventDefault();
+      const id = parseInt(ev.currentTarget.dataset.id, 10);
+      const pos = findGemPos(id);
+      if (!pos) return;
+      handleSelectOrSwap(pos);
+    }
+    function findGemPos(id) {
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          if (state.grid[r][c]?.id === id) return { r, c };
+        }
+      }
+      return null;
+    }
+    function handleSelectOrSwap(pos) {
+      if (!state.selected) {
+        selectAt(pos.r, pos.c);
+        return;
+      }
+      if (samePos(state.selected, pos)) {
+        clearSelection();
+        return;
+      }
+      if (isAdjacent(state.selected, pos)) {
+        const a = state.selected;
+        const b = pos;
+        clearSelection();
+        trySwap(a, b);
+        return;
+      }
+      // Not adjacent -> move selection
+      selectAt(pos.r, pos.c);
+    }
+    function isAdjacent(a, b) {
+      return (a.r === b.r && Math.abs(a.c - b.c) === 1) ||
+             (a.c === b.c && Math.abs(a.r - b.r) === 1);
+    }
+
+    // ---------- Swap & match processing ----------
+    async function trySwap(a, b) {
+      if (state.busy) return;
+      state.busy = true;
+      cancelHint();
+
+      const gemA = state.grid[a.r][a.c];
+      const gemB = state.grid[b.r][b.c];
+
+      // Special interaction: bomb + non-bomb clears all of that color
+      let bombTrigger = null;
+      if (gemA.special === 'bomb' && !gemB.special) bombTrigger = { bomb: gemA, target: gemB, swap: [a, b] };
+      else if (gemB.special === 'bomb' && !gemA.special) bombTrigger = { bomb: gemB, target: gemA, swap: [a, b] };
+      else if (gemA.special === 'bomb' && gemB.special === 'bomb') {
+        // double bomb -> clear entire board
+        bombTrigger = { bomb: gemA, target: null, double: true, swap: [a, b] };
+      }
+
+      // Swap in grid
+      state.grid[a.r][a.c] = gemB;
+      state.grid[b.r][b.c] = gemA;
+      await animateSwap(gemA, a, gemB, b);
+
+      if (bombTrigger) {
+        // Refund no move (it's a valid activation). We do consume a move.
+        consumeMove();
+        await activateBomb(bombTrigger);
+        await chainLoop();
+        finishTurn();
+        return;
+      }
+
+      // Check for matches
+      const m = findMatches();
+      if (m.cells.size === 0) {
+        // Invalid: swap back
+        state.grid[a.r][a.c] = gemA;
+        state.grid[b.r][b.c] = gemB;
+        await animateSwap(gemA, b, gemB, a);
+        // Brief shake to signal invalid
+        gemA.el.classList.add('swap-fail');
+        gemB.el.classList.add('swap-fail');
+        await sleep(360);
+        gemA.el.classList.remove('swap-fail');
+        gemB.el.classList.remove('swap-fail');
+        state.busy = false;
+        scheduleHint();
+        return;
+      }
+
+      consumeMove();
+      // We have a valid turn; reset combo
+      state.combo = 1;
+      state.cascadesThisTurn = 0;
+      await clearAndCascade(m);
+      await chainLoop();
+      finishTurn();
+    }
+
+    function consumeMove() {
+      state.moves = Math.max(0, state.moves - 1);
+      updateHUD();
+    }
+
+    async function chainLoop() {
+      let m = findMatches();
+      while (m.cells.size > 0) {
+        state.cascadesThisTurn++;
+        state.combo = Math.min(8, state.combo + 0.5);
+        await clearAndCascade(m);
+        m = findMatches();
+      }
+    }
+
+    async function clearAndCascade(matchInfo) {
+      // 1. Build the set of cells to clear. The "upgradeAt" cell in a special group
+      //    stays in place but transforms into the special piece.
+      const toClear = new Set();
+      const upgradeMap = new Map(); // key -> {special, type}
+      for (const g of matchInfo.groups) {
+        for (const cell of g.cells) {
+          const k = cell.r + ',' + cell.c;
+          toClear.add(k);
+        }
+        if (g.upgradeAt) {
+          const k = g.upgradeAt.r + ',' + g.upgradeAt.c;
+          toClear.delete(k);
+          upgradeMap.set(k, { special: g.special, type: g.type });
+        }
+      }
+      // 2. Resolve triggered specials (already-placed striped/bomb) inside the match
+      //    by expanding toClear with their blast pattern.
+      const extraCells = new Set();
+      for (const k of toClear) {
+        const [r, c] = k.split(',').map(Number);
+        const gem = state.grid[r][c];
+        if (!gem) continue;
+        if (gem.special === 'striped-h') {
+          for (let i = 0; i < GRID; i++) extraCells.add(r + ',' + i);
+        } else if (gem.special === 'striped-v') {
+          for (let i = 0; i < GRID; i++) extraCells.add(i + ',' + c);
+        } else if (gem.special === 'bomb') {
+          for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+              const rr = r + dr, cc = c + dc;
+              if (inBounds(rr, cc)) extraCells.add(rr + ',' + cc);
+            }
+          }
+        }
+      }
+      for (const k of extraCells) toClear.add(k);
+
+      // 3. Score
+      const basePerGem = 30;
+      const earned = Math.floor(basePerGem * toClear.size * state.combo);
+      state.score += earned;
+      const firstGroup = matchInfo.groups[0];
+      const popR = firstGroup.cells[0].r;
+      const popC = Math.round(
+        firstGroup.cells.reduce((s, p) => s + p.c, 0) / firstGroup.cells.length
+      );
+      const big = toClear.size >= 5 || state.combo >= 2;
+      showPop('+' + earned, popR, popC, big);
+
+      // 4. Pop animation for cleared cells; remove their DOM and clear grid.
+      const popPromises = [];
+      for (const k of toClear) {
+        const [r, c] = k.split(',').map(Number);
+        const gem = state.grid[r][c];
+        if (gem?.el) {
+          gem.el.classList.add('popping');
+          popPromises.push(sleep(ANIM.pop).then(() => {
+            if (gem.el?.parentNode) gem.el.parentNode.removeChild(gem.el);
+            gem.el = null;
+          }));
+        }
+        state.grid[r][c] = null;
+      }
+      // Apply upgrades to surviving gems BEFORE awaiting pop, so visuals update
+      for (const [k, up] of upgradeMap.entries()) {
+        const [r, c] = k.split(',').map(Number);
+        const gem = state.grid[r][c];
+        if (gem) {
+          gem.special = up.special;
+          applyGemStyle(gem);
+        }
+      }
+      updateHUD();
+      await Promise.all(popPromises);
+
+      // 5. Gravity + refill
+      await applyGravity();
+      await refillEmpty();
+    }
+
+    async function applyGravity() {
+      const fallAnims = [];
+      for (let c = 0; c < GRID; c++) {
+        const stack = [];
+        for (let r = GRID - 1; r >= 0; r--) {
+          const g = state.grid[r][c];
+          if (g) {
+            stack.push(g);
+            state.grid[r][c] = null;
+          }
+        }
+        let writeR = GRID - 1;
+        for (const gem of stack) {
+          state.grid[writeR][c] = gem;
+          gem._col = c;
+          fallAnims.push(animateFall(gem, writeR));
+          writeR--;
+        }
+      }
+      await Promise.all(fallAnims);
+    }
+
+    async function refillEmpty() {
+      const types = numTypes();
+      const fallAnims = [];
+      for (let c = 0; c < GRID; c++) {
+        const emptyRows = [];
+        for (let r = 0; r < GRID; r++) {
+          if (!state.grid[r][c]) emptyRows.push(r);
+        }
+        // Spawn new gems above the board, in order
+        for (let i = 0; i < emptyRows.length; i++) {
+          const finalR = emptyRows[i];
+          // stagger spawn: deeper empty slots spawn higher above the board
+          const startOffset = (emptyRows.length - i);
+          const startR = -startOffset;
+          const type = Math.floor(Math.random() * types);
+          const gem = makeGem(type);
+          state.grid[finalR][c] = gem;
+          gem._col = c;
+          placeGemElement(gem, startR, c, false);
+          fallAnims.push(animateFall(gem, finalR));
+        }
+      }
+      await Promise.all(fallAnims);
+    }
+
+    async function activateBomb(trig) {
+      if (trig.double) {
+        // Clear entire board
+        for (let r = 0; r < GRID; r++) {
+          for (let c = 0; c < GRID; c++) {
+            const gem = state.grid[r][c];
+            if (gem?.el) {
+              gem.el.classList.add('popping');
+              setTimeout(() => {
+                if (gem.el?.parentNode) gem.el.parentNode.removeChild(gem.el);
+                gem.el = null;
+              }, ANIM.pop);
+            }
+            state.grid[r][c] = null;
+          }
+        }
+        const bonus = 5000;
+        state.score += bonus;
+        showPop('+' + bonus, 3, 3, true);
+        await sleep(ANIM.pop + 20);
+        updateHUD();
+        await applyGravity();
+        await refillEmpty();
+        return;
+      }
+      const target = trig.target;
+      // Clear all gems of target.type
+      const cells = [];
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          const g = state.grid[r][c];
+          if (g && g.type === target.type) {
+            cells.push({ r, c });
+          }
+        }
+      }
+      // Animate
+      for (const { r, c } of cells) {
+        const gem = state.grid[r][c];
+        if (gem?.el) {
+          gem.el.classList.add('popping');
+          setTimeout(() => {
+            if (gem.el?.parentNode) gem.el.parentNode.removeChild(gem.el);
+            gem.el = null;
+          }, ANIM.pop);
+        }
+        state.grid[r][c] = null;
+      }
+      const bonus = 200 + cells.length * 50;
+      state.score += bonus;
+      const popR = target ? Math.floor(GRID / 2) : 3;
+      const popC = target ? Math.floor(GRID / 2) : 3;
+      showPop('+' + bonus, popR, popC, true);
+      await sleep(ANIM.pop + 20);
+      updateHUD();
+      await applyGravity();
+      await refillEmpty();
+    }
+
+    // ---------- Hint ----------
+    function findAnyValidMove() {
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          if (c < GRID - 1 && wouldMatch(r, c, r, c + 1)) return [{ r, c }, { r, c: c + 1 }];
+          if (r < GRID - 1 && wouldMatch(r, c, r + 1, c)) return [{ r, c }, { r: r + 1, c }];
+        }
+      }
+      return null;
+    }
+    function wouldMatch(r1, c1, r2, c2) {
+      const a = state.grid[r1][c1], b = state.grid[r2][c2];
+      if (!a || !b) return false;
+      state.grid[r1][c1] = b; state.grid[r2][c2] = a;
+      const m = findMatches();
+      state.grid[r1][c1] = a; state.grid[r2][c2] = b;
+      return m.cells.size > 0;
+    }
+
+    function scheduleHint() {
+      cancelHint();
+      if (!state.playing || state.paused || state.gameOver) return;
+      state.hintTimer = setTimeout(() => {
+        if (state.busy || !state.playing) return;
+        const m = findAnyValidMove();
+        if (m) {
+          m.forEach(({ r, c }) => {
+            const g = state.grid[r][c];
+            if (g?.el) g.el.classList.add('hint');
+          });
+          state.hintCell = m;
+          setTimeout(() => {
+            m.forEach(({ r, c }) => {
+              const g = state.grid[r][c];
+              if (g?.el) g.el.classList.remove('hint');
+            });
+          }, 3000);
+        }
+      }, ANIM.hintDelay);
+    }
+    function cancelHint() {
+      if (state.hintTimer) { clearTimeout(state.hintTimer); state.hintTimer = null; }
+      if (state.hintCell) {
+        state.hintCell.forEach(({ r, c }) => {
+          const g = state.grid[r][c];
+          if (g?.el) g.el.classList.remove('hint');
+        });
+        state.hintCell = null;
+      }
+    }
+
+    // ---------- Shuffle ----------
+    async function shuffleBoard() {
+      if (state.busy) return;
+      state.busy = true;
+      cancelHint();
+      // Pop everything
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          const g = state.grid[r][c];
+          if (g?.el) {
+            g.el.classList.add('popping');
+            setTimeout(() => {
+              if (g.el?.parentNode) g.el.parentNode.removeChild(g.el);
+              g.el = null;
+            }, ANIM.pop);
+          }
+        }
+      }
+      await sleep(ANIM.pop + 20);
+      state.grid = generateBoard();
+      // Ensure there's at least one valid move; if not, regenerate
+      let safety = 10;
+      while (!findAnyValidMove() && safety-- > 0) {
+        state.grid = generateBoard();
+      }
+      renderBoard();
+      state.busy = false;
+      scheduleHint();
+    }
+
+    // ---------- Level / end-of-turn ----------
+    function finishTurn() {
+      updateHUD();
+      // Check if we can still play
+      if (!findAnyValidMove()) {
+        // Auto-shuffle
+        shuffleBoard();
+      }
+      if (state.score >= state.target) {
+        // Level complete
+        const bonus = state.moves * 50;
+        state.score += bonus;
+        saveBest(state.score);
+        updateHUD();
+        showLevelComplete(bonus);
+        return;
+      }
+      if (state.moves <= 0) {
+        saveBest(state.score);
+        showGameOver();
+        return;
+      }
+      state.busy = false;
+      scheduleHint();
+    }
+
+    function levelConfig(level) {
+      const target = 1000 + (level - 1) * 800;
+      const moves  = Math.max(18, 30 - Math.floor((level - 1) / 2));
+      return { target, moves };
+    }
+
+    function startGame(level = 1) {
+      state.level = level;
+      const { target, moves } = levelConfig(level);
+      state.score = 0;
+      state.moves = moves;
+      state.target = target;
+      state.combo = 1;
+      state.cascadesThisTurn = 0;
+      state.selected = null;
+      state.cursor = { r: 3, c: 3 };
+      state.busy = false;
+      state.paused = false;
+      state.playing = true;
+      state.gameOver = false;
+      cancelHint();
+      // Make sure there's a valid move before rendering
+      state.grid = generateBoard();
+      let safety = 10;
+      while (!findAnyValidMove() && safety-- > 0) state.grid = generateBoard();
+      renderBoard();
+      updateCursor();
+      updateHUD();
+      hideAllOverlays();
+      scheduleHint();
+    }
+
+    function startNextLevel() {
+      startGame(state.level + 1);
+    }
+
+    function showLevelComplete(bonus) {
+      $('level-score').textContent = state.score.toLocaleString();
+      $('level-bonus').textContent = '+' + bonus.toLocaleString();
+      $('level-title').textContent = `Level ${state.level} Complete!`;
+      $('level-sub').textContent = state.level >= 7
+        ? 'Master tier. You absolute legend.'
+        : 'Get ready — next level is harder.';
+      ovLevel.classList.add('show');
+      state.playing = false;
+    }
+
+    function showGameOver() {
+      $('over-score').textContent = state.score.toLocaleString();
+      const best = Math.max(loadBest(), state.score);
+      $('over-best').textContent = best.toLocaleString();
+      $('over-sub').textContent = state.score >= state.target
+        ? 'So close — you hit the target but ran out of moves.'
+        : "Didn't quite hit the target this time. Try again?";
+      ovOver.classList.add('show');
+      state.playing = false;
+      state.gameOver = true;
+    }
+
+    function showPause() {
+      if (!state.playing) return;
+      state.paused = true;
+      hudStatus.textContent = 'Paused';
+      ovPause.classList.add('show');
+    }
+    function hidePause() {
+      state.paused = false;
+      hudStatus.textContent = 'Playing';
+      ovPause.classList.remove('show');
+      scheduleHint();
+    }
+
+    function hideAllOverlays() {
+      ovStart.classList.remove('show');
+      ovPause.classList.remove('show');
+      ovLevel.classList.remove('show');
+      ovOver.classList.remove('show');
+    }
+
+    function updateHUD() {
+      hudLevel.textContent = state.level;
+      hudScore.textContent = state.score.toLocaleString();
+      hudMoves.textContent = state.moves;
+      hudTarget.textContent = `Target · ${state.target.toLocaleString()}`;
+      hudBest.textContent  = `Best · ${Math.max(loadBest(), state.score).toLocaleString()}`;
+      hudProgress.textContent = `${Math.min(state.score, state.target).toLocaleString()} / ${state.target.toLocaleString()}`;
+      hudCombo.textContent = '×' + (state.combo).toFixed(1).replace(/\.0$/, '');
+      hudCasc.textContent = `${state.cascadesThisTurn} cascade${state.cascadesThisTurn === 1 ? '' : 's'}`;
+      hudStatus.textContent = state.paused ? 'Paused' : (state.playing ? 'Playing' : 'Idle');
+    }
+
+    // ---------- Keyboard ----------
+    document.addEventListener('keydown', (ev) => {
+      const key = ev.key;
+      if (key === 'p' || key === 'P' || key === 'Escape') {
+        if (ovStart.classList.contains('show')) return;
+        if (ovLevel.classList.contains('show')) return;
+        if (ovOver.classList.contains('show')) return;
+        if (state.paused) hidePause(); else showPause();
+        ev.preventDefault();
+        return;
+      }
+      if (key === 'r' || key === 'R') {
+        if (state.busy) return;
+        if (ovStart.classList.contains('show')) return;
+        if (confirm('Restart this level?')) startGame(state.level);
+        return;
+      }
+      if (!state.playing || state.paused || state.busy || state.gameOver) return;
+      let dr = 0, dc = 0;
+      if (key === 'ArrowUp') dr = -1;
+      else if (key === 'ArrowDown') dr = 1;
+      else if (key === 'ArrowLeft') dc = -1;
+      else if (key === 'ArrowRight') dc = 1;
+      else if (key === ' ' || key === 'Enter') {
+        if (state.selected) {
+          // Swap with neighbor in direction of cursor
+          const drc = dirBetween(state.selected, state.cursor);
+          if (drc) trySwap(state.selected, drc);
+          else clearSelection();
+        } else {
+          selectAt(state.cursor.r, state.cursor.c);
+        }
+        ev.preventDefault();
+        return;
+      } else {
+        return;
+      }
+      ev.preventDefault();
+      const newR = Math.max(0, Math.min(GRID - 1, state.cursor.r + dr));
+      const newC = Math.max(0, Math.min(GRID - 1, state.cursor.c + dc));
+      if (state.selected) {
+        // If we have a selection, move cursor; if cursor becomes adjacent, swap; else just move
+        if (isAdjacent(state.selected, { r: newR, c: newC }) && !(state.selected.r === newR && state.selected.c === newC)) {
+          const sel = state.selected;
+          clearSelection();
+          state.cursor = { r: newR, c: newC };
+          updateCursor();
+          trySwap(sel, { r: newR, c: newC });
+          return;
+        }
+        // Otherwise, keep selection, just move cursor
+        state.cursor = { r: newR, c: newC };
+        updateCursor();
+      } else {
+        state.cursor = { r: newR, c: newC };
+        updateCursor();
+      }
+    });
+
+    function dirBetween(a, b) {
+      const dr = b.r - a.r, dc = b.c - a.c;
+      if (Math.abs(dr) + Math.abs(dc) !== 1) return null;
+      return { r: a.r + dr, c: a.c + dc };
+    }
+
+    // ---------- Wire up buttons ----------
+    $('btn-start').addEventListener('click', () => {
+      hideAllOverlays();
+      startGame(1);
+    });
+    $('btn-pause').addEventListener('click', () => {
+      if (state.paused) hidePause(); else showPause();
+    });
+    $('btn-resume').addEventListener('click', hidePause);
+    $('btn-shuffle').addEventListener('click', () => {
+      if (state.playing && !state.paused) shuffleBoard();
+    });
+    $('btn-restart-pause').addEventListener('click', () => {
+      hideAllOverlays();
+      startGame(state.level);
+    });
+    $('btn-menu-pause').addEventListener('click', () => {
+      hideAllOverlays();
+      showStart();
+    });
+    $('btn-next').addEventListener('click', () => {
+      hideAllOverlays();
+      startNextLevel();
+    });
+    $('btn-retry').addEventListener('click', () => {
+      hideAllOverlays();
+      startGame(state.level);
+    });
+    $('btn-menu-over').addEventListener('click', () => {
+      hideAllOverlays();
+      showStart();
+    });
+
+    function showStart() {
+      state.playing = false;
+      state.paused = false;
+      updateHUD();
+      ovStart.classList.add('show');
+    }
+
+    // ---------- Brand swatch on start screen ----------
+    (function renderStartBranding() {
+      const brand = $('start-brand');
+      BASE_COLORS.forEach(c => {
+        const d = document.createElement('div');
+        d.className = 'dot';
+        d.style.background = c.bg;
+        d.style.boxShadow = `0 2px 6px ${c.bg}55`;
+        brand.appendChild(d);
+      });
+      const legend = $('start-legend');
+      const items = [
+        { label: 'Match 3+', color: '#4d96ff' },
+        { label: 'Cascades', color: '#6bcb77' },
+        { label: 'Specials on 4 / 5', color: '#9b72cf' },
+      ];
+      items.forEach(it => {
+        const wrap = document.createElement('span');
+        wrap.className = 'item';
+        wrap.innerHTML = `<span class="swatch" style="background:${it.color}"></span>${it.label}`;
+        legend.appendChild(wrap);
+      });
+    })();
+
+    // ---------- Initial ----------
+    showStart();
+    updateHUD();
+
+    // Pause when tab hidden
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && state.playing && !state.paused) showPause();
+    });
+  })();
+  </script>
+</body>
+</html>
