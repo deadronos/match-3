@@ -1,46 +1,21 @@
+import { sleep } from './animation';
 import {
-  applyGravity,
   detectBombTrigger,
-  emptyGrid,
   findAnyValidMove,
   findMatches,
   generateBoard,
   inBounds,
   isAdjacent,
-  refillEmpty,
-  resolveClears,
   samePos,
 } from './board';
+import { resolveBombTrigger } from './bombs';
 import { ANIM, GRID, levelConfig, numTypes, SCORING } from './config';
+import { createHintController } from './hints';
+import { getTurnCompletionState } from './progression';
+import { createInitialState } from './state';
 import { loadBest, saveBest } from './storage';
+import { resolveTurnSequence } from './turns';
 import type { Cell, GameState, Gem, Position } from './types';
-
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-function createInitialState(): GameState {
-  return {
-    grid: emptyGrid(),
-    nextId: 1,
-    score: 0,
-    level: 1,
-    moves: 30,
-    target: 1000,
-    combo: 1,
-    cascadesThisTurn: 0,
-    selected: null,
-    cursor: { r: 3, c: 3 },
-    busy: false,
-    paused: false,
-    playing: false,
-    gameOver: false,
-    screen: 'start',
-    hint: null,
-    levelBonus: null,
-    poppedGems: new Set<number>(),
-    lastPop: null,
-    spawned: [],
-  };
-}
 
 /**
  * GameEngine owns the entire game state machine.
@@ -59,8 +34,7 @@ export class GameEngine {
   best: number;
 
   private listeners = new Set<() => void>();
-  private hintTimer: ReturnType<typeof setTimeout> | null = null;
-  private hintHideTimer: ReturnType<typeof setTimeout> | null = null;
+  private hintController = createHintController();
 
   constructor(opts?: { initialBest?: number }) {
     this.state = createInitialState();
@@ -178,6 +152,10 @@ export class GameEngine {
     });
     await sleep(ANIM.swap + 20);
 
+    await this.resolveSwapOutcome(a, b, gemA, gemB);
+  }
+
+  private async resolveSwapOutcome(a: Position, b: Position, gemA: Gem, gemB: Gem): Promise<void> {
     const trig = detectBombTrigger(gemA, gemB);
 
     if (trig) {
@@ -188,10 +166,8 @@ export class GameEngine {
       return;
     }
 
-    // No bomb interaction — check for a match.
     const match = findMatches(this.state.grid);
     if (match.cells.size === 0) {
-      // Invalid swap — swap back, shake, undo.
       this.mutateGrid((g) => {
         g[a.r]![a.c] = gemA;
         g[b.r]![b.c] = gemB;
@@ -204,9 +180,13 @@ export class GameEngine {
 
     this.consumeMove();
     this.setState((s) => ({ ...s, combo: 1, cascadesThisTurn: 0 }));
+    await this.resolveMatchChain(match);
+    this.finishTurn();
+  }
+
+  private async resolveMatchChain(match: ReturnType<typeof findMatches>): Promise<void> {
     await this.clearAndCascade(match);
     await this.chainLoop();
-    this.finishTurn();
   }
 
   /** Force-shuffle the current board (e.g. via the toolbar). */
@@ -318,84 +298,7 @@ export class GameEngine {
   }
 
   private async clearAndCascade(match: ReturnType<typeof findMatches>): Promise<void> {
-    const { toClear, upgradeMap } = resolveClears(match, this.state.grid);
-
-    // Score.
-    const earned = Math.floor(SCORING.basePerGem * toClear.size * this.state.combo);
-    const firstGroup = match.groups[0]!;
-    const popR = firstGroup.cells[0]?.r ?? 0;
-    const popC = Math.round(
-      firstGroup.cells.reduce((s, p) => s + p.c, 0) / firstGroup.cells.length,
-    );
-    const big = toClear.size >= 5 || this.state.combo >= 2;
-
-    // Mark matched cells as popped (kept in the grid for the pop animation).
-    const poppedGems: Gem[] = [];
-    for (const k of toClear) {
-      const [rStr, cStr] = k.split(',');
-      const r = Number(rStr);
-      const c = Number(cStr);
-      const gem = this.state.grid[r]?.[c] ?? null;
-      if (gem) poppedGems.push(gem);
-    }
-
-    this.setState((s) => ({
-      ...s,
-      score: s.score + earned,
-      poppedGems: new Set(poppedGems.map((g) => g.id)),
-      lastPop: { r: popR, c: popC, big, text: `+${earned.toLocaleString()}` },
-    }));
-
-    await sleep(ANIM.pop + 20);
-
-    // Apply upgrades to surviving gems.
-    this.mutateGrid((g) => {
-      for (const k of toClear) {
-        const [rStr, cStr] = k.split(',');
-        const r = Number(rStr);
-        const c = Number(cStr);
-        g[r]![c] = null;
-      }
-      for (const [k, up] of upgradeMap.entries()) {
-        const [rStr, cStr] = k.split(',');
-        const r = Number(rStr);
-        const c = Number(cStr);
-        const existing = g[r]?.[c] ?? null;
-        if (existing) {
-          g[r]![c] = { ...existing, special: up.special };
-        }
-      }
-    });
-    this.setState((s) => ({ ...s, poppedGems: new Set<number>() }));
-
-    // Gravity.
-    await this.runGravity();
-
-    // Refill.
-    await this.runRefill();
-  }
-
-  private async runGravity(): Promise<void> {
-    // Compute moves; clone the grid so React sees the change.
-    const next = this.state.grid.map((row) => row.slice());
-    const moves = applyGravity(next);
-    this.setState((s) => ({ ...s, grid: next }));
-    if (moves.length === 0) return;
-    await sleep(ANIM.fall);
-  }
-
-  private async runRefill(): Promise<void> {
-    const types = numTypes(this.state.level);
-    const next = this.state.grid.map((row) => row.slice());
-    const spawned = refillEmpty(next, types, () => this.state.nextId++);
-    this.setState((s) => ({
-      ...s,
-      grid: next,
-      spawned: spawned.map((sp) => ({ id: sp.gem.id, fromR: sp.fromR, toR: sp.toR, c: sp.col })),
-    }));
-    if (spawned.length === 0) return;
-    await sleep(ANIM.fall);
-    this.setState((s) => ({ ...s, spawned: [] }));
+    await resolveTurnSequence(this.state, match, (updater) => this.setState(updater));
   }
 
   private async activateBomb(trig: {
@@ -403,77 +306,25 @@ export class GameEngine {
     target: Gem | null;
     double: boolean;
   }): Promise<void> {
-    if (trig.double) {
-      // Clear everything.
-      const cells: Gem[] = [];
-      for (let r = 0; r < GRID; r++) {
-        for (let c = 0; c < GRID; c++) {
-          const g = this.state.grid[r]?.[c] ?? null;
-          if (g) cells.push(g);
-        }
-      }
-      this.setState((s) => ({
-        ...s,
-        score: s.score + SCORING.bombFullClearBonus,
-        poppedGems: new Set(cells.map((g) => g.id)),
-        lastPop: {
-          r: 3,
-          c: 3,
-          big: true,
-          text: `+${SCORING.bombFullClearBonus.toLocaleString()}`,
-        },
-      }));
-      await sleep(ANIM.pop + 20);
-      this.mutateGrid((g) => {
-        for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID; c++) g[r]![c] = null;
-      });
-      this.setState((s) => ({ ...s, poppedGems: new Set<number>() }));
-      await this.runGravity();
-      await this.runRefill();
-      return;
-    }
-
-    const target = trig.target!;
-    const cells: Gem[] = [];
-    for (let r = 0; r < GRID; r++) {
-      for (let c = 0; c < GRID; c++) {
-        const g = this.state.grid[r]?.[c] ?? null;
-        if (g && g.type === target.type) cells.push(g);
-      }
-    }
-    const bonus = SCORING.bombColorBonus + cells.length * SCORING.bombColorPerGem;
-    this.setState((s) => ({
-      ...s,
-      score: s.score + bonus,
-      poppedGems: new Set(cells.map((g) => g.id)),
-      lastPop: {
-        r: Math.floor(GRID / 2),
-        c: Math.floor(GRID / 2),
-        big: true,
-        text: `+${bonus.toLocaleString()}`,
+    await resolveBombTrigger(
+      trig,
+      this.state,
+      (updater) => this.setState(updater),
+      (fn) => this.mutateGrid(fn),
+      async () => {
+        await this.clearAndCascade({ groups: [], cells: new Set<string>() });
       },
-    }));
-    await sleep(ANIM.pop + 20);
-    this.mutateGrid((g) => {
-      for (let r = 0; r < GRID; r++) {
-        for (let c = 0; c < GRID; c++) {
-          const cell = g[r]?.[c] ?? null;
-          if (cell && cell.type === target.type) g[r]![c] = null;
-        }
-      }
-    });
-    this.setState((s) => ({ ...s, poppedGems: new Set<number>() }));
-    await this.runGravity();
-    await this.runRefill();
+    );
   }
 
   private finishTurn(): void {
     this.setState((s) => ({ ...s, busy: false }));
 
-    const { score, target, moves } = this.state;
+    const { score } = this.state;
+    const completion = getTurnCompletionState(this.state);
 
-    if (score >= target) {
-      const bonus = moves * SCORING.moveRemainingBonus;
+    if (completion.shouldCompleteLevel) {
+      const bonus = completion.bonus;
       this.best = Math.max(this.best, score + bonus);
       saveBest(this.best);
       this.setState((s) => ({
@@ -485,7 +336,7 @@ export class GameEngine {
       }));
       return;
     }
-    if (moves <= 0) {
+    if (completion.shouldEndGame) {
       this.best = Math.max(this.best, score);
       saveBest(this.best);
       this.setState((s) => ({
@@ -507,30 +358,11 @@ export class GameEngine {
   // ---- hint -------------------------------------------------------------
 
   private scheduleHint(): void {
-    this.cancelHint();
-    if (!this.state.playing || this.state.paused || this.state.gameOver) return;
-    this.hintTimer = setTimeout(() => {
-      if (this.state.busy || !this.state.playing || this.state.paused) return;
-      const move = findAnyValidMove(this.state.grid);
-      if (move) {
-        this.setState((s) => ({ ...s, hint: move }));
-        this.hintHideTimer = setTimeout(() => {
-          this.setState((s) => ({ ...s, hint: null }));
-        }, ANIM.hintVisible);
-      }
-    }, ANIM.hintDelay);
+    this.hintController.scheduleHint(this.state, (updater) => this.setState(updater));
   }
 
   private cancelHint(): void {
-    if (this.hintTimer) {
-      clearTimeout(this.hintTimer);
-      this.hintTimer = null;
-    }
-    if (this.hintHideTimer) {
-      clearTimeout(this.hintHideTimer);
-      this.hintHideTimer = null;
-    }
-    if (this.state.hint) this.setState((s) => ({ ...s, hint: null }));
+    this.hintController.cancelHint(this.state, (updater) => this.setState(updater));
   }
 
   // ---- visibility / cleanup --------------------------------------------
