@@ -15,59 +15,20 @@ export async function resolveBombTrigger(
   mutateGrid: (fn: (grid: (Gem | null)[][]) => void) => void,
   runGravityAndRefill: () => Promise<void>,
 ): Promise<void> {
-  if (trigger.double) {
-    const cells: Gem[] = [];
-    for (let r = 0; r < GRID; r++) {
-      for (let c = 0; c < GRID; c++) {
-        const gem = state.grid[r]?.[c] ?? null;
-        if (gem) cells.push(gem);
-      }
-    }
+  const cells = getBombCells(trigger, state);
+  if (cells.length === 0) return;
 
-    setState((current) => ({
-      ...current,
-      score: current.score + SCORING.bombFullClearBonus,
-      poppedGems: new Set(cells.map((gem) => gem.id)),
-      lastPop: {
-        r: 3,
-        c: 3,
-        big: true,
-        text: `+${SCORING.bombFullClearBonus.toLocaleString()}`,
-      },
-    }));
+  const bonus = trigger.double
+    ? SCORING.bombFullClearBonus
+    : SCORING.bombColorBonus + cells.length * SCORING.bombColorPerGem;
 
-    await sleep(ANIM.pop + 20);
-    mutateGrid((grid) => {
-      for (let r = 0; r < GRID; r++) {
-        for (let c = 0; c < GRID; c++) {
-          grid[r]![c] = null;
-        }
-      }
-    });
-    setState((current) => ({ ...current, poppedGems: new Set<number>() }));
-    await runGravityAndRefill();
-    return;
-  }
-
-  const target = trigger.target;
-  if (!target) return;
-
-  const cells: Gem[] = [];
-  for (let r = 0; r < GRID; r++) {
-    for (let c = 0; c < GRID; c++) {
-      const gem = state.grid[r]?.[c] ?? null;
-      if (gem && gem.type === target.type) cells.push(gem);
-    }
-  }
-
-  const bonus = SCORING.bombColorBonus + cells.length * SCORING.bombColorPerGem;
   setState((current) => ({
     ...current,
     score: current.score + bonus,
     poppedGems: new Set(cells.map((gem) => gem.id)),
     lastPop: {
-      r: Math.floor(GRID / 2),
-      c: Math.floor(GRID / 2),
+      r: trigger.double ? 3 : Math.floor(GRID / 2),
+      c: trigger.double ? 3 : Math.floor(GRID / 2),
       big: true,
       text: `+${bonus.toLocaleString()}`,
     },
@@ -78,10 +39,40 @@ export async function resolveBombTrigger(
     for (let r = 0; r < GRID; r++) {
       for (let c = 0; c < GRID; c++) {
         const cell = grid[r]?.[c] ?? null;
-        if (cell && cell.type === target.type) grid[r]![c] = null;
+        if (trigger.double) {
+          grid[r]![c] = null;
+          continue;
+        }
+        if (cell && cell.type === trigger.target?.type) grid[r]![c] = null;
       }
     }
   });
+
   setState((current) => ({ ...current, poppedGems: new Set<number>() }));
   await runGravityAndRefill();
+}
+
+function getBombCells(trigger: BombTrigger, state: GameState): Gem[] {
+  if (trigger.double) {
+    const cells: Gem[] = [];
+    for (let r = 0; r < GRID; r++) {
+      for (let c = 0; c < GRID; c++) {
+        const gem = state.grid[r]?.[c] ?? null;
+        if (gem) cells.push(gem);
+      }
+    }
+    return cells;
+  }
+
+  const target = trigger.target;
+  if (!target) return [];
+
+  const cells: Gem[] = [];
+  for (let r = 0; r < GRID; r++) {
+    for (let c = 0; c < GRID; c++) {
+      const gem = state.grid[r]?.[c] ?? null;
+      if (gem && gem.type === target.type) cells.push(gem);
+    }
+  }
+  return cells;
 }
