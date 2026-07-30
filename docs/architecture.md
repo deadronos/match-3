@@ -1,13 +1,13 @@
 # Architecture
 
-This document describes how the v2 codebase is organised and the design decisions behind it. Read this first if you're picking the project up.
+This document describes how the v2 codebase is organized and the design decisions behind it. Read this first if you are picking the project up.
 
 ## High-level shape
 
 ```
                 ┌────────────────────┐
                 │   React components │
-                │ (Board, HUD, …)    │
+                │ (Board, HUD, ...)  │
                 └──────────┬─────────┘
                            │ useGame() hook
                            ▼
@@ -19,7 +19,7 @@ This document describes how the v2 codebase is organised and the design decision
                            │ state + intents
                            ▼
                 ┌────────────────────┐
-                │   GameEngine       │  ← single source of truth
+                │   GameEngine       │  <- single source of truth
                 │  (state machine)   │
                 └──────────┬─────────┘
                            │ calls pure functions
@@ -31,34 +31,34 @@ This document describes how the v2 codebase is organised and the design decision
                 └────────────────────┘
 ```
 
-The defining rule: **the React tree is a "view" of the engine's state**. The engine owns the state machine, animation timing, and game progression. React just renders the current state and dispatches intent methods.
+The defining rule: **the React tree is a view of the engine state**. The engine owns the state machine, the animation timing, and the game progression. React just renders the current state and dispatches intent methods.
 
 ## Directory layout
 
 ```
 src/
-├── main.tsx                # React entry — createRoot + <App />
+├── main.tsx                # React entry: createRoot + <App />
 ├── App.tsx                 # Top-level layout: HUD, Board, overlays
 ├── index.css               # Globals: CSS variables, body / html
 ├── App.css                 # Component CSS (board, HUD, overlays, animations)
 │
-├── game/                   # ── Pure / engine code (no React, no DOM) ──
+├── game/                   # Pure / engine code (no React, no DOM)
 │   ├── animation.ts       # Shared async delay helper used by the engine
 │   ├── bombs.ts           # Bomb trigger resolution and clear behavior
-│   ├── board.ts           # findMatches, applyGravity, refillEmpty, …
+│   ├── board.ts           # findMatches, applyGravity, refillEmpty, ...
 │   ├── config.ts          # GRID, colors, animation timings, level math
-│   ├── engine.ts          # GameEngine class — orchestrates state + timers + turns
-│   ├── hints.ts           # Hint scheduling / cancellation helpers
+│   ├── engine.ts          # GameEngine class: state + timers + turns
+│   ├── hints.ts           # Hint scheduling and cancellation helpers
 │   ├── progression.ts     # Level-end and game-over progression checks
 │   ├── state.ts           # Initial state factory for a fresh game
-│   ├── storage.ts         # localStorage wrapper for the best-score
-│   ├── turns.ts           # Turn resolution sequence (clear → gravity → refill)
-│   ├── types.ts           # Gem, Position, GameState, MatchInfo, …
+│   ├── storage.ts         # localStorage wrapper for the best score
+│   ├── turns.ts           # Turn resolution sequence (clear -> gravity -> refill)
+│   ├── types.ts           # Gem, Position, GameState, MatchInfo, ...
 │   ├── board.test.ts      # Vitest tests for board logic
-│   ├── config.test.ts     # Vitest tests for level config / palette
-│   └── engine.test.ts     # Vitest tests for the engine (fake-timers)
+│   ├── config.test.ts     # Vitest tests for level config and palette
+│   └── engine.test.ts     # Vitest tests for the engine (fake timers)
 │
-├── components/             # ── React view layer ──
+├── components/             # React view layer
 │   ├── Board.tsx           # Cell background + gem rendering
 │   ├── Gem.tsx             # A single gem (memoized)
 │   ├── HUD.tsx             # Level / score / moves / combo + toolbar
@@ -66,7 +66,7 @@ src/
 │   ├── Footer.tsx          # Keyboard hints + version
 │   └── icons.tsx           # Inline SVG icons (shuffle, pause, special badges)
 │
-├── hooks/                  # ── Glue between engine and React ──
+├── hooks/                  # Glue between engine and React
 │   ├── useGame.ts          # Owns the engine; re-renders on state changes
 │   ├── useKeyboardInput.ts # Wires arrows / space / P / R / Esc
 │   └── useVisibilityPause.ts # Auto-pause on tab hide
@@ -75,9 +75,9 @@ src/
     └── setup.ts            # Vitest setup: @testing-library/jest-dom matchers
 ```
 
-## Engine ↔ React contract
+## Engine to React contract
 
-The engine exposes a deliberately tiny API:
+The engine exposes a small API:
 
 ```ts
 class GameEngine {
@@ -125,13 +125,13 @@ function useGame() {
 }
 ```
 
-The hook subscribes to the engine's state updates instead of mirroring the state manually in `useState`. React re-renders from the external store snapshot whenever the engine notifies subscribers.
+The hook subscribes to the engine state updates instead of mirroring the state manually in `useState`. React re-renders from the external store snapshot whenever the engine notifies subscribers.
 
-This means **the engine can run for arbitrarily long (e.g. a chain of 6 cascades) without any React state management**. The React layer just sees the final state.
+This means **the engine can run for arbitrarily long (a chain of 6 cascades) without any React state management**. The React layer just sees the final state.
 
 ## Animation strategy
 
-We use **CSS transitions on the `left` / `top` properties** of each gem:
+We use **CSS transitions on the `left` and `top` properties** of each gem:
 
 ```css
 .gem {
@@ -143,31 +143,31 @@ We use **CSS transitions on the `left` / `top` properties** of each gem:
 
 - Each gem has a stable `id` (monotonically increasing) so React keeps the same DOM node across re-renders.
 - The gem's `style.left` and `style.top` are derived from the grid: `calc(${c} * (100% / 8))`.
-- When the engine moves a gem in the grid, the next React render sees the new position; the CSS transition interpolates between the old and new values.
+- When the engine moves a gem in the grid, the next React render sees the new position. The CSS transition interpolates between the old and new values.
 
-### Falling & spawning
+### Falling and spawning
 
-New gems (from `refillEmpty`) spawn "from above the board" and fall in. The engine reports them in `state.spawned[]` with a `fromR` (negative) and `toR` (in the grid). The Board component renders the gem at `fromR` first, then the engine clears `state.spawned` after `ANIM.fall` ms, and the next render places the gem at `toR` — the CSS transition animates the fall.
+New gems (from `refillEmpty`) spawn from above the board and fall in. The engine reports them in `state.spawned[]` with a `fromR` (negative) and a `toR` (in the grid). The Board component renders the gem at `fromR` first, then the engine clears `state.spawned` after `ANIM.fall` ms, and the next render places the gem at `toR`. The CSS transition animates the fall.
 
 ### Popping
 
-Gems that are about to be cleared are added to `state.poppedGems`. They stay in the grid for `ANIM.pop` ms with a `popping` class (CSS keyframes). After the delay, the engine removes them from the grid AND from `poppedGems` in the same state update — React unmounts the DOM, the animation has already played.
+Gems that are about to be cleared go into `state.poppedGems`. They stay in the grid for `ANIM.pop` ms with a `popping` class (CSS keyframes). After the delay, the engine removes them from the grid AND from `poppedGems` in the same state update. React unmounts the DOM, the animation has already played.
 
-This three-step pattern is what the original v1 game did with direct DOM manipulation; the React version preserves the exact same timing.
+This three-step pattern is what the original v1 game did with direct DOM manipulation. The React version preserves the same timing.
 
 ## Pure game logic
 
-Everything in `src/game/` is **pure**: no React, no DOM, no globals. Functions take a grid in, return a grid (or set of cells) out. The engine is the only thing that has side effects (timers, state mutation, React subscriptions).
+Everything in `src/game/` is **pure**: no React, no DOM, no globals. Functions take a grid in and return a grid (or a set of cells) out. The engine is the only thing that has side effects (timers, state mutation, React subscriptions).
 
 Why bother?
 
 - 100% unit-testable. No jsdom needed for the 60+ tests covering match detection, gravity, refill, bomb triggers, level config, and engine state transitions.
-- The engine can be reused in a Node/CLI environment, a worker, or a future React Native port.
+- The engine can be reused in a Node or CLI environment, a worker, or a future React Native port.
 - Refactors of the UI never touch the game rules.
 
 ## State machine
 
-The engine's `screen` field is the source of truth for "what is the user looking at right now":
+The engine's `screen` field is the source of truth for what the user is looking at right now:
 
 | `screen` | Meaning | What the UI shows |
 | --- | --- | --- |
@@ -180,51 +180,51 @@ The engine's `screen` field is the source of truth for "what is the user looking
 Transitions:
 
 ```text
-   start ──[startLevel]──▶ playing
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        │                     │                     │
-   [togglePause]         [score≥target]         [moves=0]
-        │                     │                     │
-        ▼                     ▼                     ▼
+   start --[startLevel]--> playing
+                              |
+        +---------------------+---------------------+
+        |                     |                     |
+   [togglePause]         [score>=target]         [moves=0]
+        |                     |                     |
+        v                     v                     v
      paused            levelComplete           gameOver
-        │                     │                     │
+        |                     |                     |
    [togglePause]     [startNextLevel]         [restartLevel]
-        │                     │                     │
-        ▼                     ▼                     ▼
+        |                     |                     |
+        v                     v                     v
     playing            playing (level+1)       playing
 ```
 
-The auto-pause-on-tab-hide transitions `playing → paused`. The auto-shuffle-on-no-moves transitions `playing → playing` (a coroutine inside `finishTurn`).
+The auto-pause-on-tab-hide transitions `playing` to `paused`. The auto-shuffle-on-no-moves transitions `playing` to `playing` (a coroutine inside `finishTurn`).
 
 ## CSS architecture
 
 - Global tokens in `src/index.css` (CSS variables, font stack, background).
-- Component CSS in `src/App.css`. We didn't split per-component CSS because the styles are tightly interrelated (the gem's classes are reused by the board, the overlays share tokens, etc.). For a larger app we'd reach for CSS modules.
-- All animations are CSS keyframes / transitions — no JS-driven tweens. This keeps the React renders cheap.
+- Component CSS in `src/App.css`. We did not split per-component CSS because the styles are tightly interrelated. The gem classes are reused by the board, and the overlays share tokens. For a larger app we would reach for CSS Modules.
+- All animations are CSS keyframes or transitions. No JS-driven tweens. This keeps the React renders cheap.
 
-## What's NOT here
+## What is NOT here
 
-- No state management library (Redux, Zustand, etc.). The engine IS the store.
-- No routing. There's a single screen.
+- No state management library (Redux, Zustand, etc.). The engine is the store.
+- No routing. There is a single screen.
 - No i18n. The strings are in English.
-- No persistence beyond the all-time best score. Mid-game save/restore is out of scope.
-- No sound. (The original was silent too.)
+- No persistence beyond the all-time best score. Mid-game save and restore is out of scope.
+- No sound. The original was silent too.
 - No server. The best score lives in `localStorage`.
 
 ## Testing philosophy
 
 - **Pure logic** is unit-tested in isolation (`board.test.ts`, `config.test.ts`).
 - **Engine state transitions** are tested with `vi.useFakeTimers()` and `vi.advanceTimersByTimeAsync()` to fast-forward through the animation delays (`engine.test.ts`).
-- **No React component tests** yet. The components are thin and the behavior is well-covered by engine tests. Add `@testing-library/react` tests if/when component logic gets non-trivial.
+- **No React component tests** yet. The components are thin and the behavior is well-covered by engine tests. Add `@testing-library/react` tests if and when component logic gets non-trivial.
 - Coverage: `npm run test:coverage` (v8 provider).
 
 ## Tooling
 
-- **Vite 8** — bundler + dev server.
-- **React 19** — UI library. The new JSX transform; no `React` import needed in `.tsx` files.
-- **TypeScript 7** — strict mode + `noUncheckedIndexedAccess` for safe grid access.
-- **Vitest 4** — test runner, configured in `vite.config.ts` (single config for dev + test).
-- **Biome 2.5** — single Rust-based tool that does linting + formatting. ~100x faster than ESLint + Prettier, doesn't depend on the TypeScript programmatic API, so it works seamlessly with TS 7 (which doesn't have a stable API yet — see `plan.md`).
+- **Vite 8**: bundler + dev server.
+- **React 19**: UI library. The new JSX transform. No `React` import needed in `.tsx` files.
+- **TypeScript 7**: strict mode + `noUncheckedIndexedAccess` for safe grid access.
+- **Vitest 4**: test runner, configured in `vite.config.ts` (single config for dev and test).
+- **Biome 2.5**: single Rust-based tool that does linting and formatting. About 100x faster than ESLint + Prettier. Does not depend on the TypeScript programmatic API, so it works with TS 7, which does not have a stable API yet (see `plan.md`).
 
-See `plan.md` for the step-by-step build order and `migration.md` for the v1 → v2 changes.
+See `plan.md` for the step-by-step build order and `migration.md` for the v1 to v2 changes.
