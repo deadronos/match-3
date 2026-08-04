@@ -1,9 +1,18 @@
+/**
+ * Modal overlays: start screen, pause, level-complete, and game-over.
+ *
+ * Each overlay shares the same `OverlayShell` (a centered panel with
+ * fade-in). They are conditionally shown by the parent based on
+ * `state.screen`.
+ */
 import { BASE_COLORS } from '../game/config';
 
 interface BrandProps {
+  /** Which color dots to show; defaults to the base palette. */
   colors?: readonly { bg: string }[];
 }
 
+/** Small row of color swatches used as a brand mark on the start screen. */
 function BrandDots({ colors = BASE_COLORS }: BrandProps) {
   return (
     <div className="brand">
@@ -23,6 +32,7 @@ interface OverlayShellProps {
   children: React.ReactNode;
 }
 
+/** Backdrop + centered panel; toggles its `.show` class for the fade-in. */
 function OverlayShell({ show, children }: OverlayShellProps) {
   return <div className={`overlay${show ? ' show' : ''}`}>{children}</div>;
 }
@@ -32,6 +42,7 @@ interface StartOverlayProps {
   onStart: () => void;
 }
 
+/** Title screen with a brief "how to play" and a Play button. */
 export function StartOverlay({ show, onStart }: StartOverlayProps) {
   return (
     <OverlayShell show={show}>
@@ -76,6 +87,7 @@ interface PauseOverlayProps {
   onMenu: () => void;
 }
 
+/** Pause menu: resume, restart the level, or return to the title screen. */
 export function PauseOverlay({ show, onResume, onRestart, onMenu }: PauseOverlayProps) {
   return (
     <OverlayShell show={show}>
@@ -106,6 +118,7 @@ interface LevelCompleteOverlayProps {
   onNext: () => void;
 }
 
+/** Shown when the player reaches the level target. Shows score + bonus. */
 export function LevelCompleteOverlay({
   show,
   level,
@@ -144,11 +157,13 @@ interface GameOverOverlayProps {
   show: boolean;
   score: number;
   best: number;
+  /** True if the player actually hit the target before running out of moves. */
   hitTarget: boolean;
   onRetry: () => void;
   onMenu: () => void;
 }
 
+/** Shown when the player runs out of moves. Retry or back to menu. */
 export function GameOverOverlay({
   show,
   score,

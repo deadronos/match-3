@@ -1,3 +1,10 @@
+/**
+ * The grid background + every gem currently in play.
+ *
+ * Pure render: read `state.grid` and project it into absolute-positioned
+ * `<Gem>` children. Spawning gems (mid-fall) use the row from
+ * `state.spawned` so the CSS transition animates them in from above.
+ */
 import { type ReactElement, useMemo } from 'react';
 import { posKey } from '../game/board';
 import { GRID } from '../game/config';
@@ -5,16 +12,20 @@ import type { GameState, Position } from '../game/types';
 import { Gem } from './Gem';
 
 interface BoardProps {
+  /** Current engine state. */
   state: GameState;
+  /** Click handler: receives the clicked gem's stable id + the pointer event. */
   onGemPointerDown: (gemId: number, ev: React.PointerEvent<HTMLDivElement>) => void;
 }
 
 /**
- * Renders the cell background grid and all gems currently in play.
+ * Render the playfield.
  *
- * The gem-to-position mapping is computed from {@link GameState.grid}, with
- * a small adjustment for gems that are mid-spawn (the `spawned` list tells
- * us to render them above their final row so CSS can animate the fall).
+ *  - Draws the 8x8 cell background tiles.
+ *  - Walks `state.grid` and draws a `<Gem>` for every non-null cell.
+ *  - Uses the gem's `spawned.fromR` instead of the final row while a gem is
+ *    still falling in, so CSS animates the drop.
+ *  - Floats the most recent score popup above the board.
  */
 export function Board({ state, onGemPointerDown }: BoardProps) {
   const cells = useMemo(() => {
@@ -86,6 +97,7 @@ export function Board({ state, onGemPointerDown }: BoardProps) {
   );
 }
 
+/** A floating "+123" text that drifts up and fades out. */
 function ScorePop({ r, c, big, text }: { r: number; c: number; big: boolean; text: string }) {
   return (
     <div

@@ -1,3 +1,10 @@
+/**
+ * Tests for the pure board-logic functions in `./board`.
+ *
+ * No engine, no React, no async — just hand-built grids and assertions.
+ * A small in-file helper builds a "non-matching background" so individual
+ * `it()` blocks can layer a known match on top of a clean board.
+ */
 import { describe, expect, it } from 'vitest';
 import {
   applyGravity,
@@ -20,8 +27,10 @@ import {
 import type { Cell, Gem, Position } from './types';
 
 let idCounter = 0;
+/** Allocate the next gem id. Each test gets its own monotonic ids. */
 const nextId = () => ++idCounter;
 
+/** Build a bare gem. */
 function mkGem(type: number, special: Gem['special'] = null): Gem {
   return { id: nextId(), type, special };
 }

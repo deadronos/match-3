@@ -4,6 +4,7 @@
  */
 import type { JSX } from 'react';
 
+/** Shuffle / restart icon. */
 export function IconShuffle(): JSX.Element {
   return (
     <svg
@@ -23,6 +24,7 @@ export function IconShuffle(): JSX.Element {
   );
 }
 
+/** Pause icon (two vertical bars). */
 export function IconPause(): JSX.Element {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor">
@@ -32,6 +34,7 @@ export function IconPause(): JSX.Element {
   );
 }
 
+/** Play icon (right-pointing triangle). */
 export function IconPlay(): JSX.Element {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor">
@@ -40,6 +43,7 @@ export function IconPlay(): JSX.Element {
   );
 }
 
+/** Horizontal stripe — marks a horizontal-striped special gem. */
 export function IconStripedH(): JSX.Element {
   return (
     <svg
@@ -54,6 +58,7 @@ export function IconStripedH(): JSX.Element {
   );
 }
 
+/** Vertical stripe — marks a vertical-striped special gem. */
 export function IconStripedV(): JSX.Element {
   return (
     <svg
@@ -68,6 +73,7 @@ export function IconStripedV(): JSX.Element {
   );
 }
 
+/** Bomb icon (circle + fuse). Marks a bomb special gem. */
 export function IconBomb(): JSX.Element {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor">

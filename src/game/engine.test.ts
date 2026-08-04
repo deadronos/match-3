@@ -1,11 +1,19 @@
+/**
+ * Tests for the {@link GameEngine} state machine.
+ *
+ * Uses `vi.useFakeTimers()` + `vi.advanceTimersByTimeAsync()` to fast-forward
+ * through the engine's real-time animation sleeps. Each test plants a
+ * hand-built board in `engine.state.grid` to exercise specific code paths
+ * (match, bomb, no-match snap-back, level complete, game over).
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { findAnyValidMove, findMatches } from './board';
 import { levelConfig, numTypes } from './config';
 import { GameEngine } from './engine';
 import { clearBest, loadBest } from './storage';
 
+/** Advance jsdom's fake timers and yield to awaited microtasks. */
 function flush(ms: number) {
-  // Advance jsdom's fake timers and yield to any awaited microtasks.
   return vi.advanceTimersByTimeAsync(ms);
 }
 

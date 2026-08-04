@@ -1,8 +1,15 @@
+/**
+ * Tiny wrapper around `localStorage` for the all-time best score.
+ *
+ * Every function is a no-op when run outside a browser (SSR / tests), and
+ * every read/write is wrapped in a try/catch so quota / privacy errors
+ * never crash the game.
+ */
 import { STORAGE_KEY } from './config';
 
 const isBrowser = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
-/** Read the all-time best score from localStorage. */
+/** Read the all-time best score from localStorage. Returns 0 if missing. */
 export function loadBest(): number {
   if (!isBrowser) return 0;
   try {

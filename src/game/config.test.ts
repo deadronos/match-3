@@ -1,3 +1,7 @@
+/**
+ * Tests for the lookup helpers in `./config`: palette size per level and
+ * the level target / move formula.
+ */
 import { describe, expect, it } from 'vitest';
 import { BASE_COLORS, EXTRA_COLORS, levelConfig, numTypes } from './config';
 

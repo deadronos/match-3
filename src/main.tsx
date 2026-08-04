@@ -1,3 +1,9 @@
+/**
+ * App entry point.
+ *
+ * Mounts the React tree into `#root` from `index.html`, inside
+ * `<StrictMode>` so React can warn about side-effects.
+ */
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';

@@ -1,3 +1,14 @@
+/**
+ * GameEngine owns the entire game state machine.
+ *
+ * The engine is decoupled from React: it exposes a public `state` and a
+ * `subscribe(listener)` API. The UI just renders `state` and calls intent
+ * methods (swap, pause, restart, ...). All animation timing is owned by the
+ * engine; the UI never has to coordinate transitions.
+ *
+ * Why: makes the engine 100% unit-testable (no React, no DOM), and keeps the
+ * React layer small and "view-only".
+ */
 import { sleep } from './animation';
 import {
   detectBombTrigger,
@@ -18,24 +29,27 @@ import { resolveTurnSequence } from './turns';
 import type { Cell, GameState, Gem, Position } from './types';
 
 /**
- * GameEngine owns the entire game state machine.
+ * The top-level game object. One instance lives for the whole session.
  *
- * The engine is decoupled from React: it exposes a public `state` and a
- * `subscribe(listener)` API. The UI just renders `state` and calls intent
- * methods (swap, pause, restart, ...). All animation timing is owned by the
- * engine; the UI never has to coordinate transitions.
- *
- * Why: makes the engine 100% unit-testable (no React, no DOM), and keeps the
- * React layer small and "view-only".
+ * Shape:
+ *  - `state` — the current {@link GameState}; React reads this.
+ *  - `best` — the all-time best score (mirrored from localStorage).
+ *  - public intent methods: `startLevel`, `swap`, `pause`, `resume`, …
+ *  - `subscribe(listener)` — returns an unsubscribe function.
  */
 export class GameEngine {
+  /** Read-only view of the game. Mutate through intent methods. */
   state: GameState;
   /** All-time best score (mirrored from localStorage at construction). */
   best: number;
 
+  /** Set of re-render listeners. Each one fires on every state change. */
   private listeners = new Set<() => void>();
+  /** Owns the "show a hint after a few seconds of idle" timer. */
   private hintController = createHintController();
 
+  /** Build a fresh engine. Pass `initialBest` to skip reading localStorage
+   *  (used by tests). */
   constructor(opts?: { initialBest?: number }) {
     this.state = createInitialState();
     this.best = opts?.initialBest ?? loadBest();
@@ -43,6 +57,10 @@ export class GameEngine {
 
   // ---- subscription -----------------------------------------------------
 
+  /**
+   * Register a listener. The listener is called with no arguments on every
+   * state change. Returns an unsubscribe function.
+   */
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => {
@@ -50,10 +68,12 @@ export class GameEngine {
     };
   }
 
+  /** Fire all listeners. Called after `setState`. */
   private notify(): void {
     for (const l of this.listeners) l();
   }
 
+  /** Replace the state via an updater function, then notify subscribers. */
   private setState(updater: (s: GameState) => GameState): void {
     this.state = updater(this.state);
     this.notify();
@@ -61,7 +81,7 @@ export class GameEngine {
 
   // ---- public API -------------------------------------------------------
 
-  /** Begin (or restart) a level. */
+  /** Begin (or restart) a level. Resets score, board, moves, and timers. */
   startLevel(level: number): void {
     this.cancelHint();
     const cfg = levelConfig(level);
@@ -131,8 +151,13 @@ export class GameEngine {
     }));
   }
 
-  /** Try to swap two adjacent gems. Handles bomb triggers, invalid swaps,
-   *  match resolution, scoring, cascades, level/game end. */
+  /**
+   * Try to swap two adjacent gems. This is the main user action.
+   *
+   * Handles: bomb triggers, invalid swaps (snaps back), match resolution,
+   * scoring, cascades, level/game end. Returns a promise that resolves
+   * once the full turn finishes (or snaps back if the swap was invalid).
+   */
   async swap(a: Position, b: Position): Promise<void> {
     if (this.state.busy) return;
     if (!isAdjacent(a, b)) return;
@@ -155,6 +180,10 @@ export class GameEngine {
     await this.resolveSwapOutcome(a, b, gemA, gemB);
   }
 
+  /**
+   * Decide what happens after the swap animation: bomb trigger, valid
+   * match, or invalid swap (snap back).
+   */
   private async resolveSwapOutcome(a: Position, b: Position, gemA: Gem, gemB: Gem): Promise<void> {
     const trig = detectBombTrigger(gemA, gemB);
 
@@ -184,12 +213,16 @@ export class GameEngine {
     this.finishTurn();
   }
 
+  /** Run the first clear, then drain remaining cascades. */
   private async resolveMatchChain(match: ReturnType<typeof findMatches>): Promise<void> {
     await this.clearAndCascade(match);
     await this.chainLoop();
   }
 
-  /** Force-shuffle the current board (e.g. via the toolbar). */
+  /**
+   * Force-shuffle the current board (e.g. via the toolbar). Pops every gem
+   * and then drops a brand-new board in.
+   */
   async shuffle(): Promise<void> {
     if (this.state.busy) return;
     if (!this.state.playing || this.state.paused) return;
@@ -219,7 +252,7 @@ export class GameEngine {
     this.scheduleHint();
   }
 
-  /** Update cursor position (keyboard). */
+  /** Update cursor position (keyboard). Clamps to the board. */
   setCursor(p: Position): void {
     if (!inBounds(p.r, p.c)) return;
     this.setState((s) => ({ ...s, cursor: p }));
@@ -234,11 +267,19 @@ export class GameEngine {
     this.setState((s) => ({ ...s, selected: p }));
   }
 
+  /** Drop the current selection (cursor moves away or click empty cell). */
   clearSelection(): void {
     this.setState((s) => ({ ...s, selected: null }));
   }
 
-  /** Decide between selecting / deselecting / swapping based on current state. */
+  /**
+   * Decide between selecting / deselecting / swapping based on current state.
+   *
+   *  - no selection  -> select at `p`
+   *  - same as current selection -> deselect
+   *  - adjacent to selection -> swap
+   *  - otherwise -> move selection to `p`
+   */
   async handleSelectOrSwap(p: Position): Promise<void> {
     if (this.state.busy || !this.state.playing || this.state.paused || this.state.gameOver) {
       return;
@@ -263,6 +304,7 @@ export class GameEngine {
 
   // ---- internals --------------------------------------------------------
 
+  /** Build a fresh board for `level`. Retries if the board has no moves. */
   private makeFreshGrid(level: number): Cell[][] {
     const types = numTypes(level);
     let grid = generateBoard(types, () => this.state.nextId++);
@@ -273,17 +315,20 @@ export class GameEngine {
     return grid;
   }
 
+  /** Run `fn` on a shallow-clone of the grid and publish the result.
+   *  Cloning is required so React notices the change. */
   private mutateGrid(fn: (g: Cell[][]) => void): void {
-    // Shallow-clone the grid rows so React notices the change.
     const next: Cell[][] = this.state.grid.map((row) => row.slice());
     fn(next);
     this.setState((s) => ({ ...s, grid: next }));
   }
 
+  /** Subtract one from `moves`, clamped at 0. */
   private consumeMove(): void {
     this.setState((s) => ({ ...s, moves: Math.max(0, s.moves - 1) }));
   }
 
+  /** Repeatedly clear+cascade until no more matches exist. */
   private async chainLoop(): Promise<void> {
     let match = findMatches(this.state.grid);
     while (match.cells.size > 0) {
@@ -297,10 +342,12 @@ export class GameEngine {
     }
   }
 
+  /** Run one clear-and-cascade step (turn sequence). */
   private async clearAndCascade(match: ReturnType<typeof findMatches>): Promise<void> {
     await resolveTurnSequence(this.state, match, (updater) => this.setState(updater));
   }
 
+  /** Handle a bomb swap: clear matching color (or whole board), then chain. */
   private async activateBomb(trig: {
     bomb: Gem;
     target: Gem | null;
@@ -317,6 +364,12 @@ export class GameEngine {
     );
   }
 
+  /**
+   * Called at the end of every turn.
+   *
+   * Checks for level completion / game over, persists best score, and
+   * auto-shuffles the board if no valid moves are left.
+   */
   private finishTurn(): void {
     this.setState((s) => ({ ...s, busy: false }));
 
@@ -357,10 +410,12 @@ export class GameEngine {
 
   // ---- hint -------------------------------------------------------------
 
+  /** Start the idle hint timer (cancels any previous one). */
   private scheduleHint(): void {
     this.hintController.scheduleHint(this.state, (updater) => this.setState(updater));
   }
 
+  /** Cancel the hint timer and clear any visible hint. */
   private cancelHint(): void {
     this.hintController.cancelHint(this.state, (updater) => this.setState(updater));
   }

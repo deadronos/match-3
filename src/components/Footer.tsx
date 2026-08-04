@@ -1,3 +1,6 @@
+/**
+ * Tiny footer shown below the playfield: keyboard hints + version.
+ */
 export function Footer() {
   return (
     <div className="footer">

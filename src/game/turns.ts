@@ -1,14 +1,34 @@
+/**
+ * "Resolve a turn" — the chain of steps that happens after a match is
+ * detected: score it, pop the gems, apply gravity, refill empty cells.
+ *
+ * Split out from the engine so the engine file stays small and the steps
+ * can be reasoned about (and tested) one at a time.
+ */
 import { sleep } from './animation';
 import { applyGravity, refillEmpty, resolveClears } from './board';
 import { ANIM, numTypes, SCORING } from './config';
 import type { Cell, GameState, Gem, MatchInfo, ScorePop } from './types';
 
+/** What `resolveTurnSequence` returns to the engine. */
 export interface TurnResolutionResult {
   scoreDelta: number;
   pop: ScorePop | null;
   poppedGems: Set<number>;
 }
 
+/**
+ * Resolve one match step end-to-end:
+ *
+ *  1. Compute the set of cells to clear (with special-piece upgrades).
+ *  2. Award the score (base * combo) and emit a score popup.
+ *  3. Wait for the pop animation.
+ *  4. Null out the cleared cells; apply upgrades in place.
+ *  5. Run gravity; refill empty cells from above.
+ *
+ * New gem ids are allocated from a local counter that is written back to
+ * the engine state at the end so ids stay monotonic.
+ */
 export async function resolveTurnSequence(
   state: GameState,
   match: MatchInfo,
@@ -80,6 +100,10 @@ export async function resolveTurnSequence(
   };
 }
 
+/**
+ * Drop existing gems down into empty cells, then spawn new gems from
+ * above. Publishes intermediate state for the CSS transition to animate.
+ */
 async function runGravityAndRefill(
   state: GameState,
   grid: Cell[][],
@@ -114,6 +138,11 @@ async function runGravityAndRefill(
   }
 }
 
+/**
+ * Tiny helper: copy just the combo / cascade counters off a state.
+ * Useful if you want a "this turn so far" snapshot without copying the
+ * whole grid.
+ */
 export function createTurnStateSnapshot(
   state: GameState,
 ): Pick<GameState, 'combo' | 'cascadesThisTurn'> {

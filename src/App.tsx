@@ -1,3 +1,16 @@
+/**
+ * Top-level React component.
+ *
+ * Wires the {@link GameEngine} to the UI:
+ *  - Owns the engine (via {@link useGame}) and re-renders on every state change.
+ *  - Installs keyboard input ({@link useKeyboardInput}) and auto-pause
+ *    on tab-hide ({@link useVisibilityPause}).
+ *  - Resolves a clicked gem id back to a grid position, then asks the
+ *    engine to select / swap it.
+ *  - Renders the HUD, board, footer, and the four overlay screens
+ *    (start / paused / level-complete / game-over), each shown based on
+ *    `state.screen`.
+ */
 import { useCallback } from 'react';
 import './App.css';
 import { Board } from './components/Board';
@@ -15,6 +28,7 @@ import { useGame } from './hooks/useGame';
 import { useKeyboardInput } from './hooks/useKeyboardInput';
 import { useVisibilityPause } from './hooks/useVisibilityPause';
 
+/** Root component. Mounted by `main.tsx` inside `<StrictMode>`. */
 export default function App() {
   const { engine, state } = useGame();
   useKeyboardInput(engine);

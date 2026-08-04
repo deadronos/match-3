@@ -7,12 +7,18 @@
  * Gems are identified by a stable `id` (monotonically increasing) so the UI
  * can keep the same DOM/React key across position changes (e.g. when gems
  * fall or swap).
+ *
+ * This file has no runtime code — only type declarations. It is the shared
+ * vocabulary the engine, board logic, and React layer all speak.
  */
 
+/** One cell on the board. Holds a gem, or is null while a slot is empty. */
 export type Cell = Gem | null;
 
+/** Row/column pair on the grid. Both `r` and `c` are 0..GRID-1. */
 export type Position = { readonly r: number; readonly c: number };
 
+/** Kind of "special" piece a gem can turn into. */
 export type Special = 'striped-h' | 'striped-v' | 'bomb';
 
 export interface Gem {
@@ -24,8 +30,10 @@ export interface Gem {
   special: Special | null;
 }
 
+/** Which overlay / game state the player is currently looking at. */
 export type Screen = 'start' | 'playing' | 'paused' | 'levelComplete' | 'gameOver';
 
+/** Difficulty knobs for a single level. */
 export interface LevelConfig {
   /** Target score to reach to clear the level. */
   readonly target: number;
@@ -33,6 +41,10 @@ export interface LevelConfig {
   readonly moves: number;
 }
 
+/**
+ * The score-related values shown in the HUD. All numbers are pre-formatted
+ * here only as plain numbers; the UI handles localization (commas, etc.).
+ */
 export interface Score {
   /** Current run score. */
   readonly score: number;
@@ -66,6 +78,11 @@ export interface SpawnedGem {
   readonly c: number;
 }
 
+/**
+ * The full game state. Lives on the {@link GameEngine} and is what React
+ * reads to render. Treat it as read-only from the outside; mutate it
+ * through engine intent methods.
+ */
 export interface GameState {
   /** 2D grid of gems; null = empty cell. */
   grid: Cell[][];
@@ -100,8 +117,11 @@ export interface GameState {
   spawned: SpawnedGem[];
 }
 
+/** A single run of matched gems (3+ in a row). */
 export interface MatchGroup {
+  /** Every cell in the run. */
   cells: Position[];
+  /** The color index these gems share. */
   type: number;
   /** Special piece to spawn at {@link upgradeAt} when the run is consumed. */
   special: Special | null;
@@ -109,6 +129,7 @@ export interface MatchGroup {
   upgradeAt: Position | null;
 }
 
+/** All matches found in a board scan, with deduped cell set for fast lookup. */
 export interface MatchInfo {
   groups: MatchGroup[];
   /** Set of "r,c" keys for all matched cells. */

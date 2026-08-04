@@ -1,13 +1,25 @@
+/**
+ * The top of the playfield: level / score / moves / combo, plus the
+ * toolbar (status pill, shuffle, pause).
+ */
 import type { GameState } from '../game/types';
 import { IconPause, IconShuffle } from './icons';
 
 interface HUDProps {
+  /** Current engine state. */
   state: GameState;
+  /** All-time best score (from `engine.best`). */
   best: number;
+  /** Click handler for the shuffle button. */
   onShuffle: () => void;
+  /** Click handler for the pause / resume button. */
   onTogglePause: () => void;
 }
 
+/**
+ * Read-only HUD. Pulls every value it needs from `state` / `best` and
+ * delegates all actions through the supplied callbacks.
+ */
 export function HUD({ state, best, onShuffle, onTogglePause }: HUDProps) {
   const status = state.paused ? 'Paused' : state.playing ? 'Playing' : 'Idle';
   return (

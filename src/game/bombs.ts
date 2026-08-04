@@ -1,13 +1,29 @@
+/**
+ * Bomb handling. A bomb swap clears every gem of the swapped-into color,
+ * or — when two bombs are swapped — clears the whole board for a big bonus.
+ */
 import { sleep } from './animation';
 import { ANIM, GRID, SCORING } from './config';
 import type { GameState, Gem } from './types';
 
+/** What kind of bomb swap just happened. */
 export interface BombTrigger {
   bomb: Gem;
   target: Gem | null;
   double: boolean;
 }
 
+/**
+ * Apply a bomb swap.
+ *
+ *  1. Decide which cells are affected (target color, or all for double).
+ *  2. Add the score bonus and show a big "score pop" at the board center.
+ *  3. Wait for the pop animation, then null out the affected cells.
+ *  4. Let gravity + refill run via `runGravityAndRefill`.
+ *
+ * `setState`, `mutateGrid`, and `runGravityAndRefill` are passed in by the
+ * engine so this module stays free of React / engine state.
+ */
 export async function resolveBombTrigger(
   trigger: BombTrigger,
   state: GameState,
@@ -52,6 +68,13 @@ export async function resolveBombTrigger(
   await runGravityAndRefill();
 }
 
+/**
+ * Pick the gems a bomb will clear.
+ *
+ *  - Double bomb -> every gem on the board.
+ *  - Regular bomb -> every gem matching the `target` color.
+ *  - No target -> empty list (defensive).
+ */
 function getBombCells(trigger: BombTrigger, state: GameState): Gem[] {
   if (trigger.double) {
     const cells: Gem[] = [];

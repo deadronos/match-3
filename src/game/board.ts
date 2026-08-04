@@ -1,19 +1,31 @@
+/**
+ * Pure functions that operate on a {@link Cell}[][] grid.
+ *
+ * No state lives here — every function takes the grid as input and returns
+ * a new value (or mutates the grid in well-defined ways). The engine layer
+ * uses these to make the game progress one step at a time.
+ */
 import { GRID } from './config';
 import type { Cell, Gem, MatchGroup, MatchInfo, Position, Special } from './types';
 
 /** Pos -> "r,c" key, used in Sets for O(1) lookup. */
 export const posKey = (p: Position): string => `${p.r},${p.c}`;
 
+/** True when (r, c) is inside the GRID x GRID board. */
 export const inBounds = (r: number, c: number): boolean => r >= 0 && r < GRID && c >= 0 && c < GRID;
 
+/** True when two positions are the same cell (or both null). */
 export const samePos = (a: Position | null, b: Position | null): boolean =>
   a !== null && b !== null && a.r === b.r && a.c === b.c;
 
+/** True when two positions are directly next to each other (4-neighbors). */
 export const isAdjacent = (a: Position, b: Position): boolean =>
   (a.r === b.r && Math.abs(a.c - b.c) === 1) || (a.c === b.c && Math.abs(a.r - b.r) === 1);
 
-/** The unit-step neighbor of `a` in the direction of `b`, or null if `b`
- *  is not exactly one step away. Used for keyboard-driven swap intent. */
+/**
+ * The unit-step neighbor of `a` in the direction of `b`, or null if `b`
+ * is not exactly one step away. Used for keyboard-driven swap intent.
+ */
 export function dirBetween(a: Position, b: Position): Position | null {
   const dr = b.r - a.r;
   const dc = b.c - a.c;
@@ -21,6 +33,7 @@ export function dirBetween(a: Position, b: Position): Position | null {
   return { r: a.r + dr, c: a.c + dc };
 }
 
+/** Build a brand-new grid full of empty cells. */
 export function emptyGrid(): Cell[][] {
   return Array.from({ length: GRID }, () => new Array<Cell>(GRID).fill(null));
 }
@@ -167,8 +180,9 @@ export function resolveClears(
 
 /**
  * Apply gravity: each column collapses to the bottom, gems slide down.
- * Returns the list of (gem, newRow) pairs for gems that actually moved.
- * No-op moves (a gem that was already at the bottom) are not included.
+ * Mutates the grid in place. Returns the list of (gem, newRow) pairs for
+ * gems that actually moved. No-op moves (a gem that was already at the
+ * bottom) are not included.
  */
 export function applyGravity(grid: Cell[][]): Array<{ gem: Gem; col: number; toR: number }> {
   const moves: Array<{ gem: Gem; col: number; toR: number }> = [];
@@ -240,7 +254,8 @@ export function findAnyValidMove(grid: Cell[][]): [Position, Position] | null {
   return null;
 }
 
-/** Test whether swapping (r1,c1) with (r2,c2) would create a match. */
+/** Test whether swapping (r1,c1) with (r2,c2) would create a match.
+ *  Temporarily swaps, scans, then swaps back. */
 export function wouldMatch(
   grid: Cell[][],
   r1: number,
